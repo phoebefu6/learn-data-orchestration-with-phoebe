@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 2 of 6. Replace 'run at 2:30' with 'run after clean succeeds'. What a DAG actually is, why skipped is the honest run state, and the night Daybreak's calendar finally told the truth.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="From cron to DAG - learn data orchestration with phoebe">
+<meta property="og:description" content="Session 2 of 6. Dependencies as facts, not guesses. Honesty first: the calendar looks worse before it looks better.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/courses/02-from-cron-to-dag.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="From cron to DAG - learn data orchestration with phoebe">
+<meta name="twitter:description" content="Session 2 of 6. Run after, not run at.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 2 · From cron to DAG - learn data orchestration with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=1">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-data-orchestration-with-phoebe</a> / Session 2 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Data Orchestration with Phoebe · Session 2 of 6</div>
+    <h1>From cron <span class="accent">to DAG</span></h1>
+    <p class="sub">Last session the clean job fired at 2:30 whether the extracts had finished or not, and twelve mornings a month quietly paid for it. Tonight the guess about duration becomes a fact about completion: every task waits for its upstreams to succeed, and Daybreak's calendar tells the truth for the first time. Fair warning - the truth looks worse before it looks better.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Easy</span>
+      <span class="chip audience">You know why the punctual pipeline lies</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · What a DAG is, and the same ideas everywhere</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: turning the dependencies on</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where the artifact stands</h2>
+    </div>
+    <p class="lede">Thirty mornings on time, twelve silently wrong, and a crontab that cannot see the difference. Session 1 ended with the diagnosis: "run at 2:30" is a guess about duration standing in for the thing we actually meant, which was "run after the extracts succeed". Tonight we say the second sentence to a scheduler that can enforce it, watch what it costs, and meet the vocabulary twice - once in Airflow's words, once in Dagster's - to prove the ideas belong to no product.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with:</strong> the run-after-not-run-at mental shift, the three downstream run states and why "skipped" is the honest one, a two-vocabulary phrasebook (Airflow and Dagster) for one set of concepts, and a simulator calendar where failures finally show up as missing mornings instead of wrong ones.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers DAGs</span>
+      <h2>Run after, not run at <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Airflow's docs define the object this whole course orbits: "A Dag is a model that encapsulates everything needed to execute a workflow" - and crucially, it "dictates the order in which they have to run, and which tasks depend on what others". The arrows from session 1's diagram stop being wishful thinking and become configuration.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 290" role="img" aria-label="Daybreak's seven tasks with enforced dependency arrows and no clock times downstream">
+        <style>
+          .dgT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .dgW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .dgL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .dgM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .dgN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+        </style>
+        <text x="440" y="26" class="dgT" text-anchor="middle">The same seven tasks - now the arrows are real</text>
+        <rect x="60" y="48" width="150" height="32" rx="7" fill="#065F46"/>
+        <text x="135" y="69" class="dgW" text-anchor="middle">extract orders</text>
+        <rect x="60" y="90" width="150" height="32" rx="7" fill="#065F46"/>
+        <text x="135" y="111" class="dgW" text-anchor="middle">extract payments</text>
+        <rect x="60" y="132" width="150" height="32" rx="7" fill="#065F46"/>
+        <text x="135" y="153" class="dgW" text-anchor="middle">extract inventory</text>
+        <rect x="290" y="90" width="110" height="32" rx="7" fill="#059669"/>
+        <text x="345" y="111" class="dgW" text-anchor="middle">clean</text>
+        <rect x="460" y="90" width="90" height="32" rx="7" fill="#059669"/>
+        <text x="505" y="111" class="dgW" text-anchor="middle">join</text>
+        <rect x="610" y="90" width="110" height="32" rx="7" fill="#059669"/>
+        <text x="665" y="111" class="dgW" text-anchor="middle">aggregate</text>
+        <rect x="610" y="152" width="180" height="32" rx="7" fill="#2FB58C"/>
+        <text x="700" y="173" class="dgL" text-anchor="middle">publish dashboard</text>
+        <line x1="212" y1="64" x2="286" y2="100" stroke="#059669" stroke-width="2.5" marker-end="url(#dgArr)"/>
+        <line x1="212" y1="106" x2="286" y2="106" stroke="#059669" stroke-width="2.5" marker-end="url(#dgArr)"/>
+        <line x1="212" y1="148" x2="286" y2="112" stroke="#059669" stroke-width="2.5" marker-end="url(#dgArr)"/>
+        <line x1="402" y1="106" x2="456" y2="106" stroke="#059669" stroke-width="2.5" marker-end="url(#dgArr)"/>
+        <line x1="552" y1="106" x2="606" y2="106" stroke="#059669" stroke-width="2.5" marker-end="url(#dgArr)"/>
+        <line x1="665" y1="124" x2="690" y2="148" stroke="#059669" stroke-width="2.5" marker-end="url(#dgArr)"/>
+        <defs><marker id="dgArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#059669"/></marker></defs>
+        <text x="135" y="196" class="dgM" text-anchor="middle">2:00am - the only clock left</text>
+        <text x="540" y="196" class="dgM" text-anchor="middle">no times here - each task runs when its upstreams succeed</text>
+        <rect x="60" y="238" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="84" y="250" class="dgN">The clock starts the night. Completion drives everything after. The padding arms race is over.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the 2:30/3:00/3:30 appointments are gone; the arrows are now enforced by the scheduler.</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span> The contract, and the three downstream truths <span class="mini">4 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>In Airflow you declare the arrows in code, with the <code>&gt;&gt;</code> and <code>&lt;&lt;</code> operators: extracts <code>&gt;&gt;</code> clean <code>&gt;&gt;</code> join. That single line replaces every padded minute from session 1. "Run at 2:30" was a guess about how long the extracts take; "run after clean succeeds" is a fact about whether they finished. Facts do not need safety margins.</p>
+        <p>Once the arrows are enforced, every task downstream of a failure lands in one of three states, and each one is telling you something true:</p>
+        <ul>
+          <li><strong>Success</strong> - it ran, on inputs that actually existed. The only green worth trusting.</li>
+          <li><strong>Failed</strong> - it ran and died. Loud, visible, attributable to a task and a night.</li>
+          <li><strong>Skipped</strong> - it never ran, because its upstream did not succeed. Nothing executed on missing input.</li>
+        </ul>
+        <p>Skipped is the state people instinctively read as a defect, and it is the opposite: it is the DAG refusing to do what cron did every night - run anyway on whatever data was lying there. No output beats wrong output.</p>
+        <div class="callout example"><span class="ex-pill">Real world</span>
+          <p>Daybreak's clean task now waits for all three extracts. When extract orders dies at 2:04, clean never fires - and neither does anything after it. The 7am dashboard is visibly missing instead of quietly wrong: a store manager sees a gap and picks up the phone, instead of reading yesterday's numbers with today's date and drafting a memo about a trend that does not exist.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> A run is about a night, not just at a time <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>There is a second idea hiding in DAG runs, and it will carry session 5 on its back. Airflow's docs: "Each Dag run in Airflow has an assigned 'data interval' that represents the time range it operates in." And the run's logical date "denotes the start of the data interval, not when the Dag is actually executed."</p>
+        <p>Read that twice, because it quietly changes what a run IS. Under cron, a run was an event: something that happened at 2am. Under a DAG, a run is a claim about a time range: "this run processes Tuesday night's data" - whenever it actually executes. Tonight, or Thursday, or three weeks from now when you discover Tuesday was wrong. The run being ABOUT a night rather than just AT a time is exactly what makes history repairable, and session 5 will spend its whole build-along cashing that in.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers Dagster</span>
+      <h2>The same ideas everywhere <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Everything in part 1 sounded like Airflow features. It is not - it is what orchestration IS, and the fastest proof is hearing a second tool say the same things in different words. Dagster calls a unit of data an asset: "a logical unit of data such as a table, dataset, or machine learning model". Different noun, same arrows.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" role="img" aria-label="Airflow and Dagster vocabulary mapped to the shared orchestration concepts">
+        <style>
+          .vmT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .vmW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .vmL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .vmM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .vmN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+        </style>
+        <text x="180" y="28" class="vmT" text-anchor="middle">Airflow says</text>
+        <text x="440" y="28" class="vmT" text-anchor="middle">The concept</text>
+        <text x="700" y="28" class="vmT" text-anchor="middle">Dagster says</text>
+        <rect x="70" y="46" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="180" y="68" class="vmL" text-anchor="middle">Dag + tasks, &gt;&gt; and &lt;&lt;</text>
+        <rect x="330" y="46" width="220" height="34" rx="7" fill="#065F46"/>
+        <text x="440" y="68" class="vmW" text-anchor="middle">a workflow with real order</text>
+        <rect x="590" y="46" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="700" y="68" class="vmL" text-anchor="middle">job (the runnable unit)</text>
+        <rect x="70" y="100" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="180" y="122" class="vmL" text-anchor="middle">the table a task produces</text>
+        <rect x="330" y="100" width="220" height="34" rx="7" fill="#065F46"/>
+        <text x="440" y="122" class="vmW" text-anchor="middle">a unit of data with lineage</text>
+        <rect x="590" y="100" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="700" y="122" class="vmL" text-anchor="middle">asset</text>
+        <rect x="70" y="154" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="180" y="176" class="vmL" text-anchor="middle">the Dag's schedule</text>
+        <rect x="330" y="154" width="220" height="34" rx="7" fill="#065F46"/>
+        <text x="440" y="176" class="vmW" text-anchor="middle">start on a clock interval</text>
+        <rect x="590" y="154" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="700" y="176" class="vmL" text-anchor="middle">schedule</text>
+        <rect x="70" y="208" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="180" y="230" class="vmL" text-anchor="middle">an event-based trigger</text>
+        <rect x="330" y="208" width="220" height="34" rx="7" fill="#065F46"/>
+        <text x="440" y="230" class="vmW" text-anchor="middle">start when an event lands</text>
+        <rect x="590" y="208" width="220" height="34" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="700" y="230" class="vmL" text-anchor="middle">sensor</text>
+        <text x="440" y="266" class="vmM" text-anchor="middle">learn the middle column once - the outer columns are just accents</text>
+        <rect x="70" y="288" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="94" y="300" class="vmN">Dependencies, clocks, events. Two products, one idea set. Switching tools is a vocabulary lesson.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the Airflow-to-Dagster phrasebook, with the concept each pair of words is naming.</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span> The phrasebook, and picking the starting gun <span class="mini">5 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Dagster's own one-liners complete the mapping. A schedule is "a way to automate jobs or assets to occur on a specified interval". A sensor is "a way to trigger jobs or assets when an event occurs". Hold those two next to each other, because they are the last decision cron never let you make: WHEN should the night start at all?</p>
+        <ul>
+          <li><strong>Schedule</strong> - a clock: kick off the run at 2:00am. Right whenever the cadence itself is the contract - "the dashboard covers yesterday, built overnight".</li>
+          <li><strong>Sensor</strong> - an event: kick off the run when the source file actually lands. Right whenever the trigger you care about is a THING arriving, not a time passing.</li>
+        </ul>
+        <p>Notice what the sensor version quietly finishes off. Session 1's crontab started extracts at 2:00 hoping the upstream systems had exported by then - one last guess, one last piece of padding. "Run when the file lands" replaces it with the same move part 1 made downstream: an event fact where a clock guess used to be. Inside the DAG, completion drives the order; at the front door, arrival can drive the start.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> What an orchestrator does not fix <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Honest scoping, before the build-along makes it visceral: an orchestrator manages WHETHER and WHEN tasks run. It has no opinion about whether the code inside them is correct. Daybreak's aggregate task carries a logic bug on days 10 through 13, and it will produce wrong numbers under cron, under a DAG, under every lever this course pulls - because on those nights every upstream genuinely succeeded and every dependency was genuinely satisfied. The DAG did its whole job. The code did its job wrong.</p>
+        <p>What orchestration buys you is that failure becomes visible and recovery becomes cheap: a dead extract shows as failed, its downstream shows as skipped, and nothing publishes on garbage. What it never buys you is correctness of logic. Keep the two ledgers separate - it is the difference between blaming your scheduler and testing your code.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO ============ -->
+  <section class="section" id="demo">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Turning the dependencies on <span class="tag demo">★ 22 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Same thirty nights, same seeded failures as session 1. One new lever. Watch which numbers it moves, and - just as important - which it does not.</p>
+
+    <div class="orchsim" data-stage="2"></div>
+
+    <div class="steps">
+      <div class="step"><p>Baseline first: run the month on bare cron and confirm session 1's pair - 30 of 30 mornings on time, 12 of 30 silently wrong. The punctual liar, exactly as you left it.</p></div>
+      <div class="step"><p>Flip "DAG dependencies" and read the whole board before reacting. On time falls to 23 of 30. Silently wrong collapses from 12 to 4. Six mornings are now never published, and one is late but right. Look at the calendar: the reds did not get fixed, they got HONEST - failed nights turned into grey missing squares instead of normal-looking wrong ones.</p></div>
+      <div class="step"><p>Kill a task - pick an extract - and run tonight's trace. Downstream, clean and everything after it now reads "skipped - upstream did not succeed" instead of running on stale data. Compare that sentence with session 1's trace, where the same night ended in a dashboard that looked exactly like every other morning.</p></div>
+      <div class="step"><p>Name the trade out loud, because it is the session: honesty first. Failed nights became loud missing mornings. Nothing retries yet, and nobody is paged yet - a transient 2:04am blip still costs the whole night, and the gap is discovered by a human at 7am. Those are sessions 3 and 6, and now you know exactly why they exist.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>About the 4 that will not budge:</strong> the four remaining silently-wrong mornings are the days 10-13 aggregate logic bug. Every dependency was satisfied; the code was simply wrong. No scheduler - not this one, not any lever left in the course - can fix code. Watch that number stay put all the way to session 5, where the backfill at least repairs the record.</p>
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 3 <span class="tag exercise">15 min</span></h2>
+    </div>
+    <ul>
+      <li>Take the chain you drew after session 1 and mark every arrow that is currently enforced only by clock padding. Each mark is a place where "run at" is standing in for "run after" - and a candidate for the first DAG you write.</li>
+      <li>For that chain's very first task, decide the starting gun: clock or event? If the honest answer is "when the upstream export lands", you have found a sensor wearing a cron schedule as a disguise.</li>
+      <li>Find one job at work whose green checkmark you now trust less: it succeeds every night, but would it succeed on EMPTY input too? Write down what "skipped" would have saved you the last time its upstream failed.</li>
+    </ul>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1. What does a DAG add that cron structurally cannot?</p>
+      <button class="qopt">A · Faster task execution on the same hardware</button>
+      <button class="qopt">B · Enforced ordering based on upstream COMPLETION, not clock guesses</button>
+      <button class="qopt">C · A guarantee that task code produces correct numbers</button>
+      <p class="qwhy">The DAG "dictates the order in which they have to run, and which tasks depend on what others" - run-after replaces run-at. It makes nothing faster and, as the days 10-13 bug proves all course long, it cannot make code correct.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2. An extract dies at 2:04 and the morning shows clean as "skipped". Why is that a feature?</p>
+      <button class="qopt">A · It is not - skipped means the scheduler is misconfigured</button>
+      <button class="qopt">B · Skipping saves compute costs on failed nights</button>
+      <button class="qopt">C · Nothing ran on missing input - a visibly absent morning beats a plausible wrong one</button>
+      <p class="qwhy">Skipped is the DAG's honesty: downstream never executed on stale or missing data. Under cron the same night produced a normal-looking dashboard built on yesterday's partition - the expensive kind of failure, because nobody knows to distrust it.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3. A run's logical date is Tuesday, but it executed Thursday. What does that mean?</p>
+      <button class="qopt">A · The run is ABOUT Tuesday's data interval - whenever it actually executes</button>
+      <button class="qopt">B · The scheduler's clock drifted by two days</button>
+      <button class="qopt">C · The run failed on Tuesday and Thursday is its retry timestamp</button>
+      <p class="qwhy">The logical date "denotes the start of the data interval, not when the Dag is actually executed". A run is a claim about a time range, not just an event at a time - which is exactly what will make history repairable when session 5 reruns old nights.</p>
+    </div>
+    <p class="quiz-score">Answer all three to see your score.</p>
+  </section>
+
+  <!-- ============ COVERED ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources this session stands on</span>
+      <h2>What was covered</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Apache Airflow docs (3.3.1) · core concepts: DAGs</span><span class="note">the Dag definition, order and dependency dictation, declaring dependencies with &gt;&gt; and &lt;&lt;</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Apache Airflow docs (3.3.1) · DAG Runs</span><span class="note">the data interval, and the logical date as the start of the interval rather than the execution moment</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Dagster docs · concepts</span><span class="note">asset, job, schedule, sensor - the same ideas under different names, the scheduler-agnostic proof</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 2 cheat sheet</h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Run after, not run at</b><span>A completion fact replaces a duration guess. The padding arms race ends where the arrows begin.</span></div>
+      <div class="cheat-item"><b>Three downstream truths</b><span>Success, failed, skipped. Skipped is honesty: nothing ran on missing input.</span></div>
+      <div class="cheat-item"><b>The honesty trade</b><span>On time 30/30 to 23/30, silently wrong 12 to 4. Failures became loud missing mornings.</span></div>
+      <div class="cheat-item"><b>Data interval</b><span>A run is ABOUT a time range; the logical date marks the interval, not the execution moment. Session 5 lives here.</span></div>
+      <div class="cheat-item"><b>Schedule vs sensor</b><span>Clock or event at the front door. "Run when the file lands" kills the last piece of padding.</span></div>
+      <div class="cheat-item"><b>What a DAG cannot do</b><span>Fix code. Days 10-13 stay wrong in every mode - orchestration makes failure visible, not logic correct.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <p>Session 2 of 6 · learn-data-orchestration-with-phoebe · by Phoebe Fu</p>
+    <nav class="pagenav">
+      <a href="01-the-2am-job.html">← Prev: The 2am job</a>
+      <a href="03-retries.html">Next: Retries →</a>
+    </nav>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+<script src="../assets/orchestra-live.js?v=1"></script>
+</body>
+</html>

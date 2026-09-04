@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 3 of 6. Retries buy back five lost mornings - and silently wrong goes UP. Transient vs real failures, backoff and jitter from the SRE and AWS literature, and the honest dip.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Retries - learn data orchestration with phoebe">
+<meta property="og:description" content="Session 3 of 6. Availability bought with correctness: the night a retry turned a crash into a double-write.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/courses/03-retries.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Retries - learn data orchestration with phoebe">
+<meta name="twitter:description" content="Session 3 of 6. Retries fix the transient, and quietly bill the rest.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 3 · Retries - learn data orchestration with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=1">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-data-orchestration-with-phoebe</a> / Session 3 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Data Orchestration with Phoebe · Session 3 of 6</div>
+    <h1><span class="accent">Retries</span>, and what they quietly cost</h1>
+    <p class="sub">Session 2 bought honesty and paid in availability: six mornings a month now never publish, most of them killed by blips that would have passed on a second try. Tonight retries buy five of those mornings back - and the counter you trust most gets WORSE while you watch. The dip is real, it is in the numbers, and understanding exactly why it happens is what the next session is made of.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Medium</span>
+      <span class="chip audience">Your honest DAG loses 6 mornings a month</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Transient vs real, and the price of a rerun</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: the recovery, and the dip</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where the artifact stands</h2>
+    </div>
+    <p class="lede">Twenty-three mornings on time, four silently wrong, six never published, one late but right. The DAG made failure visible; it did nothing to make failure cheap. A 2:04am network blip still costs Daybreak the entire night, because the run dies once and stays dead. Tonight the scheduler learns to try again - carefully, with backoff, a bounded number of times - and we read the fine print on what "again" does to a task that was halfway through writing.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with:</strong> the transient-versus-real sorting test, the backoff-jitter-budget discipline straight from the SRE and AWS literature, first-hand sight of the course's honest dip - the night a retry turned a crash into a double-write - and a halfway scorecard for the build as it stands.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers retry mechanics</span>
+      <h2>Failures that pass on the second try <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">A network blip, a warehouse hiccup, a container eviction: try again and they pass, because the world moved on. A schema break: try again forever and it fails forever, because the code is wrong. Retries exist for the first kind only, and every retry setting you will ever choose is really an answer to "how sure am I which kind this is?"</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" role="img" aria-label="A sorting gate routing transient failures through retry with backoff to success, and the real failure to fail loudly">
+        <style>
+          .fgT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .fgW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .fgL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .fgM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .fgN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+          .fgR { font: 700 11px Inter, sans-serif; fill: #991B1B; }
+        </style>
+        <text x="440" y="26" class="fgT" text-anchor="middle">The sorting gate: which failures a retry can actually fix</text>
+        <rect x="60" y="52" width="170" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="145" y="72" class="fgR" text-anchor="middle">network blip</text>
+        <rect x="60" y="92" width="170" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="145" y="112" class="fgR" text-anchor="middle">warehouse hiccup</text>
+        <rect x="60" y="132" width="170" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="145" y="152" class="fgR" text-anchor="middle">container eviction</text>
+        <rect x="60" y="196" width="170" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="145" y="216" class="fgR" text-anchor="middle">schema break (day 14)</text>
+        <rect x="300" y="112" width="140" height="60" rx="10" fill="#065F46"/>
+        <text x="370" y="138" class="fgW" text-anchor="middle">transient?</text>
+        <text x="370" y="156" class="fgW" text-anchor="middle">gone on retry?</text>
+        <line x1="232" y1="67" x2="296" y2="122" stroke="#BFD6CB" stroke-width="2" marker-end="url(#fgArr)"/>
+        <line x1="232" y1="107" x2="296" y2="132" stroke="#BFD6CB" stroke-width="2" marker-end="url(#fgArr)"/>
+        <line x1="232" y1="147" x2="296" y2="152" stroke="#BFD6CB" stroke-width="2" marker-end="url(#fgArr)"/>
+        <line x1="232" y1="211" x2="296" y2="168" stroke="#BFD6CB" stroke-width="2" marker-end="url(#fgArr)"/>
+        <rect x="510" y="72" width="170" height="34" rx="7" fill="#059669"/>
+        <text x="595" y="94" class="fgW" text-anchor="middle">retry with backoff</text>
+        <rect x="740" y="72" width="110" height="34" rx="7" fill="#2FB58C"/>
+        <text x="795" y="94" class="fgL" text-anchor="middle">passes</text>
+        <rect x="510" y="176" width="230" height="34" rx="7" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text x="625" y="198" class="fgR" text-anchor="middle">fail loudly - no retry helps</text>
+        <line x1="442" y1="128" x2="506" y2="92" stroke="#059669" stroke-width="2.5" marker-end="url(#fgOk)"/>
+        <line x1="442" y1="158" x2="506" y2="190" stroke="#FCA5A5" stroke-width="2.5" marker-end="url(#fgNo)"/>
+        <line x1="682" y1="89" x2="736" y2="89" stroke="#059669" stroke-width="2.5" marker-end="url(#fgOk)"/>
+        <defs>
+          <marker id="fgArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#BFD6CB"/></marker>
+          <marker id="fgOk" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#059669"/></marker>
+          <marker id="fgNo" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#FCA5A5"/></marker>
+        </defs>
+        <text x="440" y="248" class="fgM" text-anchor="middle">three of these failures go away on their own - the fourth is code, and code does not blink</text>
+        <rect x="60" y="278" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="84" y="290" class="fgN">Retries are for failures the world causes. Failures the code causes deserve to fail fast and loud.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - transient failures flow through retry-with-backoff to success; the schema break passes straight through to fail loudly.</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span> The dials, and why you never hammer <span class="mini">4 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The mechanics are refreshingly small. In Airflow, <code>retries</code> is the maximum retry count for a task; <code>retry_delay</code> spaces the attempts; <code>retry_exponential_backoff</code> grows that spacing, capped by <code>max_retry_delay</code>; a task waiting for its next attempt sits in the <code>up_for_retry</code> state; and <code>execution_timeout</code> caps a runaway attempt so a hang cannot eat the night. Dagster says the same things through a <code>RetryPolicy</code> - a delay, <code>Backoff.EXPONENTIAL</code>, and <code>Jitter</code>. Two vocabularies again, one idea: try again, wait longer each time, do not all wait the same amount, and stop.</p>
+        <p>Why the ceremony - why not retry immediately, and forever? Because the systems literature is unusually blunt about what naive retries do at scale. Google's SRE book: "retries can destabilize a system", and when layers retry independently the amplification can be "as large as the product of the number of attempts at each layer". Their prescriptions: "Always use randomized exponential backoff", and cap the damage with a retry budget - their worked example would "only allow 60 retries per minute", after which requests simply fail.</p>
+        <div class="callout example"><span class="ex-pill">Real world</span>
+          <p>AWS's Builders' Library tells the layered story from production scars: with three layers each retrying independently, one struggling dependency at the bottom saw its load multiply to 243x - every layer's attempts compounding on the ones below. The fix they eventually shipped INTO the AWS SDK itself, in 2016, was a token bucket: retries flow while tokens last, then stop. From the article "Timeouts, retries, and backoff with jitter", by Marc, an AWS employee.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> Selfish, and similar to a powerful medicine <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The same AWS article carries the two framings worth memorizing verbatim. First: retries are "selfish" - a retrying client spends more of the server's time to raise its own odds of success, which is exactly why a whole fleet of clients retrying at once can finish off a struggling service. Second: retries are "similar to a powerful medicine" - the right dose fixes the transient blip, and an overdose does damage of its own.</p>
+        <p>Tonight Daybreak takes the right dose: two retries, with backoff, then fail loudly. Hold on to the medicine framing, because session 6 puts the overdose on a meter - the same simulator, retries cranked to ten, and a number that only moves in the wrong direction.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the dip</span>
+      <h2>The dip: what a rerun does to a half-finished write <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Here is the fine print nobody reads until it bills them. When a task that APPENDS rows crashes halfway through, its first attempt's rows are already sitting in the table. The retry does not know that. It runs the task again, from the top, and appends everything again.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" role="img" aria-label="A writer task crashing mid-append, the retry appending the same rows twice, and the inflated morning total">
+        <style>
+          .dwT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .dwW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .dwL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .dwM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .dwN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+          .dwR { font: 700 11px Inter, sans-serif; fill: #991B1B; }
+        </style>
+        <text x="440" y="26" class="dwT" text-anchor="middle">One crashed append + one retry = every early row counted twice</text>
+        <rect x="60" y="54" width="200" height="40" rx="8" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text x="160" y="72" class="dwR" text-anchor="middle">attempt 1: appending...</text>
+        <text x="160" y="87" class="dwR" text-anchor="middle">✕ crashes halfway</text>
+        <rect x="350" y="54" width="200" height="40" rx="8" fill="#059669"/>
+        <text x="450" y="72" class="dwW" text-anchor="middle">attempt 2: runs again</text>
+        <text x="450" y="87" class="dwW" text-anchor="middle">appends ALL rows - success</text>
+        <rect x="640" y="54" width="180" height="40" rx="8" fill="#2FB58C"/>
+        <text x="730" y="72" class="dwL" text-anchor="middle">morning publishes</text>
+        <text x="730" y="87" class="dwL" text-anchor="middle">green, on time</text>
+        <line x1="262" y1="74" x2="346" y2="74" stroke="#BFD6CB" stroke-width="2" marker-end="url(#dwArr)"/>
+        <line x1="552" y1="74" x2="636" y2="74" stroke="#BFD6CB" stroke-width="2" marker-end="url(#dwArr)"/>
+        <defs><marker id="dwArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#BFD6CB"/></marker></defs>
+        <text x="160" y="118" class="dwM" text-anchor="middle">half the rows already landed</text>
+        <text x="450" y="118" class="dwM" text-anchor="middle">it has no idea attempt 1 wrote anything</text>
+        <text x="730" y="118" class="dwM" text-anchor="middle">total inflated, looks plausible</text>
+        <rect x="60" y="146" width="760" height="76" rx="10" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="80" y="172" class="dwL">The table the next morning:</text>
+        <text x="80" y="192" class="dwM">first half of the rows: present TWICE (attempt 1's survivors + attempt 2's full pass)</text>
+        <text x="80" y="210" class="dwM">second half: present once - so the total is not doubled, just quietly too high. Plausible is the trap again.</text>
+        <rect x="60" y="250" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="84" y="262" class="dwN">The retry did its job. The task was not safe to run twice. That mismatch is next session's whole subject.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the crashed writer's rows were already in the table; the retry appended them again, and the morning shipped an inflated total.</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span> The honest accounting <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Write the ledger the way the numbers will show it in the build-along. Retries buy availability: mornings that used to die on a blip now recover and publish. And when a task is not rerun-safe, retries quietly spend correctness to do it: the recovered morning publishes numbers with a double-counted first half. Availability up, correctness down, and the second effect invisible unless you are counting.</p>
+        <p>Resist the instinct the dip will trigger. The fix is NOT fewer retries - dialing back to zero just re-buys session 2's six dead mornings. The fix is making reruns safe, so that running a task twice lands the same rows once. That property has a name, idempotency, and it is the whole of session 4. Tonight we take the dip with our eyes open and leave the dial alone.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> The fingerprint trail a recovery leaves <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A night that recovered is not the same as a night that ran clean, and your orchestrator records the difference even when the dashboard does not. A task that failed and is waiting to go again sits in <code>up_for_retry</code> - that state in last night's history means attempt one died, whatever the final color says. An attempt that hit <code>execution_timeout</code> tells you the task did not fail fast, it hung until the cap killed it - a different disease than a crash.</p>
+        <p>So the habit: after a rocky night, read the task states before trusting the green morning. A run whose writer shows two attempts is exactly the run whose output deserves a row-count sanity check - because as of tonight you know precisely what attempt two may have done to the table. Green says the run finished. The trail says how, and how is where the double-write hides.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO ============ -->
+  <section class="section" id="demo">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>The recovery, and the dip <span class="tag demo">★ 22 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Same thirty nights. One new lever, two numbers moving in opposite directions - watch both, because only one of them is on the dashboard.</p>
+
+    <div class="orchsim" data-stage="3"></div>
+
+    <div class="steps">
+      <div class="step"><p>Rebuild session 2's state: DAG dependencies on, retries off. Confirm the board - 23 of 30 on time, 4 of 30 silently wrong, six never published. This is the honest-but-fragile baseline the dip gets measured against.</p></div>
+      <div class="step"><p>Flip "Retries with backoff" - two attempts, spaced out. On time jumps to 28 of 30: five missing mornings came back, every one of them a transient blip that passed on a later attempt. Only day 14 stays dead, and the trace says why - extract_payments hard-breaks, and a retry cannot fix a schema break. The sorting gate, live.</p></div>
+      <div class="step"><p>NOW read silently wrong, the counter you stopped watching: it went UP, 4 to 6. Click into it and the counter names the mechanism - 2 nights double-wrote. On each, a crashed writer had already appended half its rows when it died; the retry ran the task from the top and appended them all again. The recovered morning published an inflated total, on time, in green.</p></div>
+      <div class="step"><p>Say the trade out loud: availability was bought with correctness. And do NOT reach for the retry dial to fix it - fewer retries just trades those 2 wrong mornings for 5 dead ones. The real fix is making reruns safe, and that is the entire next session. Then fill in the halfway scorecard below, honestly.</p></div>
+    </div>
+
+    <div class="section-kicker" style="margin-top:1.6rem">
+      <span class="klabel">The halfway scorecard · forgiving</span>
+      <h2>Where the build honestly stands</h2>
+    </div>
+    <table class="clean">
+      <tr><th>Check</th><th>Daybreak tonight</th><th>Where it lands</th></tr>
+      <tr><td>Dependencies enforced</td><td>✓ clean waits for all three extracts</td><td>Session 2's wire, holding firm</td></tr>
+      <tr><td>Transient failures self-heal</td><td>✓ 28/30 on time, five mornings recovered</td><td>Tonight's lever, correctly bounded</td></tr>
+      <tr><td>Reruns are safe</td><td>✗ two nights double-wrote this month</td><td>Session 4: idempotency</td></tr>
+      <tr><td>History is restatable</td><td>✗ days 10-13 still sit wrong in the record</td><td>Session 5: backfill</td></tr>
+      <tr><td>Anyone paged when it dies</td><td>✗ day 14 waited for a human at a dashboard</td><td>Session 6: alerting</td></tr>
+    </table>
+    <div class="callout tip">
+      <p><strong>Reading the verdict:</strong> self-healing, and honest about half of it. Halfway is a real place - plenty of production pipelines live here for years - but do not ship it as done. The two ✗ rows that touch data (reruns, history) are the ones quietly costing money right now; the third costs you the worst morning of the month.</p>
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 4 <span class="tag exercise">15 min</span></h2>
+    </div>
+    <ul>
+      <li>List the last three failures of the pipeline you have been carrying since session 1, and sort each through the gate: transient (would a retry have passed?) or real (code, schema, logic). If you cannot tell from the logs, that inability is itself a finding - write it down.</li>
+      <li>Find its retry settings, or confirm there are none. If retries exist, check for backoff and a cap; an unbounded or zero-delay retry is tonight's literature ignored. If none exist, note which of the three transient failures above each retry would have absorbed.</li>
+      <li>Pick its most important writer task and answer one question in writing: if this task ran twice tonight, what would the table look like tomorrow? If the answer involves the word "twice", you have found your session 4 homework early.</li>
+    </ul>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1. Day 14: extract_payments hits a schema break. What do retries do for that night?</p>
+      <button class="qopt">A · Attempt two lands after the backoff and the night recovers</button>
+      <button class="qopt">B · The retries repair the schema and the run succeeds</button>
+      <button class="qopt">C · Nothing - every attempt fails identically, because the failure is code, not weather</button>
+      <p class="qwhy">Retries exist for transient failures - blips the world causes and the world clears. A schema break fails the same way on every attempt; no attempt count fixes code. The right outcome for day 14 is failing loudly with the night's remaining hours intact.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2. Retries went on and silently wrong rose from 4 to 6. What happened on those two nights?</p>
+      <button class="qopt">A · A writer crashed mid-append; its rows were already in the table, and the retry appended them again</button>
+      <button class="qopt">B · The retries ran the wrong task twice by scheduler bug</button>
+      <button class="qopt">C · The backoff delay made the data stale before publishing</button>
+      <p class="qwhy">The crashed attempt's rows survived in the table; attempt two ran the task from the top and appended everything again, so the early rows counted twice. The retry behaved exactly as designed - the task was not safe to rerun. That is idempotency's cue.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3. Why backoff with jitter and a cap, instead of retrying immediately and forever?</p>
+      <button class="qopt">A · Immediate retries succeed too fast for the scheduler to record them</button>
+      <button class="qopt">B · Layered retries multiply - up to the product of attempts per layer - so you back off, randomize, and budget</button>
+      <button class="qopt">C · Backoff is only there to make the logs easier to read</button>
+      <p class="qwhy">The SRE book's warning is that retries can destabilize a system, with amplification as large as the product of attempts at each layer - hence randomized exponential backoff and a retry budget like their 60-per-minute example. AWS's 243x story is the same math in production.</p>
+    </div>
+    <p class="quiz-score">Answer all three to see your score.</p>
+  </section>
+
+  <!-- ============ COVERED ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources this session stands on</span>
+      <h2>What was covered</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Apache Airflow docs (3.3.1) · Tasks</span><span class="note">retries, retry_delay, retry_exponential_backoff, max_retry_delay, up_for_retry, execution_timeout</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Google SRE book · Addressing Cascading Failures</span><span class="note">retries can destabilize, randomized exponential backoff, product-of-layers amplification, the 60-per-minute retry budget</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">AWS Builders' Library · Timeouts, retries, and backoff with jitter</span><span class="note">selfish retries, the powerful-medicine dose, the layered 243x story, the SDK token bucket of 2016</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Dagster docs · op retries</span><span class="note">RetryPolicy with delay, Backoff.EXPONENTIAL and Jitter - the same dials in the second vocabulary</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 3 cheat sheet</h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The sorting gate</b><span>Transient failures pass on retry; real ones never do. Retries are for weather, not for code.</span></div>
+      <div class="cheat-item"><b>Backoff, jitter, budget</b><span>Wait longer each time, randomize, cap it (SRE example: 60/min). Layered retries multiply up to the product of attempts.</span></div>
+      <div class="cheat-item"><b>The dials</b><span>Airflow: retries, retry_delay, exponential backoff, max_retry_delay, execution_timeout. Dagster: RetryPolicy + Backoff + Jitter.</span></div>
+      <div class="cheat-item"><b>The honest dip</b><span>On time 23 to 28, silently wrong 4 to 6: two recovered nights double-wrote. Both numbers are tonight's work.</span></div>
+      <div class="cheat-item"><b>The fix is not the dial</b><span>Fewer retries re-buys dead mornings. Make reruns SAFE instead - idempotency, session 4.</span></div>
+      <div class="cheat-item"><b>The fingerprint trail</b><span>up_for_retry and execution_timeout in the history mean a rocky night. Check the trail before trusting the green.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <p>Session 3 of 6 · learn-data-orchestration-with-phoebe · by Phoebe Fu</p>
+    <nav class="pagenav">
+      <a href="02-from-cron-to-dag.html">← Prev: From cron to DAG</a>
+      <a href="04-idempotency.html">Next: Idempotency →</a>
+    </nav>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+<script src="../assets/orchestra-live.js?v=1"></script>
+</body>
+</html>

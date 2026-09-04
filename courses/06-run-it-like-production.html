@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 6 of 6. Alert on outcomes, not processes. Why ten retries delayed the page by three hours, what the SRE book says about retry amplification, and the ship-or-not scorecard.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Run it like production - learn data orchestration with phoebe">
+<meta property="og:description" content="Session 6 of 6. Outcome alerting, retry budgets, and the lever that only ever makes things worse.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/courses/06-run-it-like-production.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Run it like production - learn data orchestration with phoebe">
+<meta name="twitter:description" content="Session 6 of 6. Outcome alerting, retry budgets, the final scorecard.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 6 · Run it like production - learn data orchestration with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=1">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-data-orchestration-with-phoebe</a> / Session 6 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Data Orchestration with Phoebe · Session 6 of 6</div>
+    <h1>Run it like <span class="accent">production</span></h1>
+    <p class="sub">The build is honest, self-healing and rerun-safe. One question remains: when it breaks anyway - and day 14 proves it will - who finds out, and when? Tonight the answer moves from "a person, at 11am" to "a page, at 2:12am". Then the course's last lever: the one that looks like extra safety and only ever buys you a slower page.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Your DAG works and you are about to trust it</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Outcome alerting, and the price of retries</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: the page, the storm, the scorecard</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where the artifact stands</h2>
+    </div>
+    <p class="lede">Twenty-eight mornings on time, history restated to 30 of 30, reruns that overwrite instead of double-writing. The remaining exposure is time-to-detection: the day-14 hard break sat undiscovered for nine hours because the only detector was a human opening a dashboard. Tonight that number becomes twelve minutes, and the final scorecard decides whether this thing is actually done.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with:</strong> the symptom-versus-cause alerting frame from the SRE book applied to data deadlines, the evidence for why aggressive retries delay your own alarms, and a strict ship-or-not scorecard for any scheduled pipeline you operate.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers alerting</span>
+      <h2>Page on the missing dashboard, not the restarting process <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">Google's SRE book draws the line that data teams keep tripping over: the "what's broken" is the symptom, the "why" is the cause - and it is better to spend much more effort catching symptoms than causes.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" role="img" aria-label="Cause-based process alerts versus one outcome deadline alert">
+        <style>
+          .alT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .alW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .alL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .alM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .alN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+          .alR { font: 600 11px Inter, sans-serif; fill: #991B1B; }
+        </style>
+        <text x="230" y="28" class="alT" text-anchor="middle">Alerting on causes</text>
+        <rect x="60" y="45" width="340" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="230" y="65" class="alR" text-anchor="middle">worker restarted (14 this week, all harmless)</text>
+        <rect x="60" y="83" width="340" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="230" y="103" class="alR" text-anchor="middle">CPU spiked on the scheduler box</text>
+        <rect x="60" y="121" width="340" height="30" rx="7" fill="#FEF2F2" stroke="#FCA5A5"/>
+        <text x="230" y="141" class="alR" text-anchor="middle">disk at 81% on a volume nobody uses</text>
+        <text x="230" y="180" class="alM" text-anchor="middle">every page needs triage, most mean nothing,</text>
+        <text x="230" y="196" class="alM" text-anchor="middle">and the team learns to ignore the pager</text>
+        <text x="650" y="28" class="alT" text-anchor="middle">Alerting on the outcome</text>
+        <rect x="480" y="45" width="340" height="106" rx="10" fill="#065F46"/>
+        <text x="650" y="80" class="alW" text-anchor="middle">"No dashboard by 7:00am"</text>
+        <text x="650" y="102" class="alW" text-anchor="middle">or "the run is dead and cannot recover"</text>
+        <text x="650" y="130" class="alW" text-anchor="middle">one rule · fires only when users are hurt</text>
+        <text x="650" y="180" class="alM" text-anchor="middle">the system is not working correctly, right now -</text>
+        <text x="650" y="196" class="alM" text-anchor="middle">and every such page demands a human decision</text>
+        <rect x="60" y="240" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="84" y="252" class="alN">One person's symptom is another person's cause. Page on YOUR user's symptom: the morning.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three noisy cause alerts versus one outcome deadline that only fires when the morning is actually broken.</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span> The two rules that keep a pager trustworthy <span class="mini">5 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The SRE book's paging discipline compresses to two sentences. Every page should be actionable. And every page response should require intelligence - if a page merely merits a robotic response, it should not be a page. A restarting worker fails both tests: the robotic response is "wait, it restarts", so it should never have paged. The missing 7am dashboard passes both: someone must decide whether to rerun, restate, or warn the stores.</p>
+        <p>For a nightly build, the outcome contract writes itself as a deadline: the dashboard exists, is fresh, and arrived by 7am. Orchestrators grew first-class support for exactly this - and the ground moved recently, so check your version: the SLA feature from Airflow 2 was removed in Airflow 3.0 and replaced in 3.1 with Deadline Alerts. Same idea, new name: declare when the outcome is due, page when it is not.</p>
+        <div class="callout example"><span class="ex-pill">Real world</span>
+          <p>The freshness half of the contract is so common it is a stock feature downstream too: dbt lets a source declare warn_after and error_after against a loaded_at field, and literally runs a max(loaded_at) query to decide whether your data is stale against the SLA you defined. The check is a SELECT statement, not a heroic monitoring project.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> The four golden signals, translated for pipelines <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The SRE book's four golden signals are latency, traffic, errors and saturation. They were written for serving systems, and they translate cleanly to a nightly build: latency is minutes-past-deadline, traffic is rows processed per night (a sudden halving is a silent extract failure wearing a green checkmark), errors are failed and skipped tasks, saturation is how close the slowest night runs to the deadline.</p>
+        <p>The translation earns its keep on trend, not on any single night: a build that finishes 6:40, 6:47, 6:52 across three weeks has not failed yet, and is telling you exactly when it will.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the retry dial</span>
+      <h2>Retries are a loan against your detection time <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Session 3 set retries to two, with backoff, and stopped. Tonight the simulator shows what "just crank it to ten" actually purchases. The systems literature is unusually unanimous here.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 290" role="img" aria-label="Ten retries burning three hours in front of the alert on a hard failure">
+        <style>
+          .rsT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .rsL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .rsW { font: 600 10px Inter, sans-serif; fill: #fff; }
+          .rsM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .rsN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+          .rsR { font: 700 12px Inter, sans-serif; fill: #991B1B; }
+        </style>
+        <text x="440" y="26" class="rsT" text-anchor="middle">Day 14, schema break: the same failure under two retry settings</text>
+        <text x="70" y="66" class="rsL">retries: 2</text>
+        <line x1="150" y1="62" x2="820" y2="62" stroke="#DCEAE2" stroke-width="2"/>
+        <rect x="150" y="52" width="36" height="20" rx="4" fill="#B45309"/><text x="168" y="66" class="rsW" text-anchor="middle">try</text>
+        <rect x="196" y="52" width="36" height="20" rx="4" fill="#B45309"/><text x="214" y="66" class="rsW" text-anchor="middle">try</text>
+        <rect x="242" y="52" width="36" height="20" rx="4" fill="#B45309"/><text x="260" y="66" class="rsW" text-anchor="middle">try</text>
+        <rect x="292" y="50" width="120" height="24" rx="12" fill="#065F46"/>
+        <text x="352" y="66" class="rsW" text-anchor="middle">PAGE at 2:12am</text>
+        <text x="70" y="136" class="rsL">retries: 10</text>
+        <line x1="150" y1="132" x2="820" y2="132" stroke="#DCEAE2" stroke-width="2"/>
+        <rect x="150" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="188" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="228" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="272" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="320" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="372" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="428" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="488" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="552" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="620" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="662" y="122" width="30" height="20" rx="4" fill="#B45309"/>
+        <rect x="706" y="120" width="114" height="24" rx="12" fill="#991B1B"/>
+        <text x="763" y="136" class="rsW" text-anchor="middle">PAGE at 5:40am</text>
+        <text x="440" y="176" class="rsR" text-anchor="middle">same failure, same fix, 3h 28m less runway before the 7am deadline</text>
+        <text x="440" y="200" class="rsM" text-anchor="middle">a retry cannot fix broken code - each attempt just moves the alarm further from the incident</text>
+        <rect x="70" y="240" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="94" y="252" class="rsN">Retries handle the transient. Everything else deserves a page, and it deserves it early.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the same day-14 schema break: two retries page at 2:12am, ten retries page at 5:40am.</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span> What the SRE book and AWS both learned the hard way <span class="mini">5 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Google's cascading-failures chapter is blunt: retries can destabilize a system, and a request retried at several layers multiplies - the total attempts can be as large as the PRODUCT of the attempts at each layer. Their prescriptions are the ones session 3 baked in: always use randomized exponential backoff, never retry indefinitely, and cap the damage with a retry budget - their worked example allows a process 60 retries per minute, after which requests simply fail.</p>
+        <p>AWS's Builders' Library reaches the same place from production scars, with the best one-line framing in the literature: retries are selfish - a retrying client spends more of the server's time to raise its own odds - and they are similar to a powerful medicine, useful in the right dose and damaging beyond it. Their worked example has three layers of independent retries turning one database brownout into 243x load. Their fix shipped into the AWS SDK itself in 2016: a token bucket that lets everything retry while tokens last, then throttles.</p>
+        <ul>
+          <li><strong>And the line that closes the loop on this course's pager:</strong> the same AWS article notes, in so many words, that retries can MASK the failures your timeouts caught. The SRE monitoring chapter lists "failures masked by retries" as exactly the thing white-box monitoring exists to surface.</li>
+        </ul>
+        <div class="callout tip">
+          <p><strong>The dial has a correct setting, and it is boring:</strong> enough retries with backoff to absorb genuinely transient blips - the simulator's transients all recover by attempt two - and a hard stop after, so real failures reach the pager while there is still night left to act in.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> Why "just to be safe" feels right and is not <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Cranking retries to ten feels like adding a safety margin because on the transient failures it is harmless: attempt two succeeds, attempts three through ten never run, nothing visible changes. The cost only exists on the failures retries cannot fix - and those are precisely the ones where you needed the time. The lever's damage is invisible on good nights and maximal on the worst night of the month, which is the exact profile of a trap.</p>
+        <p>The general test, worth applying to any "more of a good thing" dial: name the failure mode the extra amount handles that the current amount does not. For retries beyond two-with-backoff, on a nightly batch, there is no honest answer.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO ============ -->
+  <section class="section" id="demo">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>The page, the storm, and the verdict <span class="tag demo">★ 22 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Every lever from five sessions, plus the two that decide whether anyone finds out when it all fails anyway.</p>
+
+    <div class="orchsim" data-stage="6"></div>
+
+    <div class="steps">
+      <div class="step"><p>Rebuild the full ladder: DAG, retries, idempotent tasks, backfill (your passport should open it by now - the bypass is there if not). Confirm the month reads 28 on time, 4 silently wrong, history 30 of 30. Those four red mornings are the days the logic bug lived; the backfill restated the record, and nothing can un-ring the mornings themselves.</p></div>
+      <div class="step"><p>Flip "Alert on outcomes" and watch exactly one number move: time to detect the day-14 break, 9 hours 4 minutes to 12 minutes. The mornings did not change - alerting never fixes anything. It converts a failure a person discovers at 11am into one an engineer starts fixing at 2:12am, with five hours of night still in hand.</p></div>
+      <div class="step"><p>Now the anti-lever: "Retry everything 10x". Watch the board first - on time 28, wrong 4, not a single square changes color, because everything transient was already recovered by attempt two. Then read the detection counter: 12 minutes has become 3 hours 28 minutes. Ten attempts at a schema break ran their full backoff schedule before the run was allowed to die and page anyone.</p></div>
+      <div class="step"><p>Kill a task with the anti-lever on and read the trace: attempt after attempt against code that cannot succeed. Then say the trade out loud: the extra eight retries fixed zero additional mornings this month and moved the worst night's alarm three and a half hours closer to the deadline. Safety theater, measured.</p></div>
+      <div class="step"><p>Run the final scorecard below on Daybreak's build as it now stands - then keep it. It is the ship-or-not test for every scheduled pipeline you own.</p></div>
+    </div>
+
+    <div class="section-kicker" style="margin-top:1.6rem">
+      <span class="klabel">The final scorecard · strict</span>
+      <h2>Ship it, or not yet</h2>
+    </div>
+    <table class="clean">
+      <tr><th>Check</th><th>Daybreak tonight</th><th>The standard</th></tr>
+      <tr><td>An outcome deadline exists and pages</td><td>✓ no-dashboard-by-7am fires at 2:12am</td><td>The page names the broken promise, not a process</td></tr>
+      <tr><td>Every alert is actionable</td><td>✓ one rule, zero restart noise</td><td>A page that merits a robotic response is deleted</td></tr>
+      <tr><td>Retries are bounded with backoff</td><td>✓ two attempts, then fail loudly</td><td>A retry cap you can defend failure-mode by failure-mode</td></tr>
+      <tr><td>The backfill path is tested, not believed</td><td>✓ days 10-13 restated this month</td><td>A restatement that has actually run, recently</td></tr>
+      <tr><td>The four morning outcomes are reviewed</td><td>✗ nobody counts silent-wrong mornings yet</td><td>A monthly look at the calendar, not just the incidents</td></tr>
+    </table>
+    <div class="callout tip">
+      <p><strong>Reading the verdict:</strong> every ✗ is a reason the pipeline is not done, whatever tonight's demo looked like. Daybreak ships with one honest gap - and now it is written down with an owner, which is the difference between a gap and a surprise.</p>
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>After the course <span class="tag exercise">30 min</span></h2>
+    </div>
+    <ul>
+      <li>Write the outcome deadline for the pipeline you brought in session 1, as one sentence: WHAT must exist, HOW fresh, by WHEN, or WHO gets paged. If your orchestrator supports deadline alerts, wire it; if not, a scheduled freshness query and one alert rule is a fine start.</li>
+      <li>Audit its retry settings against the failure modes you have actually seen. For every retry beyond two-with-backoff, name the real failure it handles. Delete the ones with no answer.</li>
+      <li>Run the final scorecard on it, honestly. Share the ✗ rows with whoever owns the pipeline with you - a written gap with an owner beats a green demo every time.</li>
+    </ul>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1. Which alert belongs on a pager, by the SRE book's own test?</p>
+      <button class="qopt">A · "The worker process restarted" - it might mean something</button>
+      <button class="qopt">B · "No dashboard by 7am" - a human must now decide what to do</button>
+      <button class="qopt">C · Both - more coverage is more safety</button>
+      <p class="qwhy">Every page should be actionable, and every response should require intelligence. The restart merits a robotic response (wait), so it fails the test - and worse, it trains the team to ignore the pager that will one day say something true.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2. Cranking retries from 2 to 10 changed exactly one number in the simulator. Which, and why?</p>
+      <button class="qopt">A · Mornings on time went up - more attempts, more recoveries</button>
+      <button class="qopt">B · Silently wrong went down - retries clean bad data</button>
+      <button class="qopt">C · Time-to-detection went from 12 minutes to 3h 28m - the storm ran before the page</button>
+      <p class="qwhy">Every transient blip already recovered on attempt two, so attempts three through ten fixed nothing. On the one failure retries cannot fix, they burned three and a half hours of night before the run was allowed to die and page someone.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3. What is a retry budget, per the cascading-failures chapter?</p>
+      <button class="qopt">A · A cap on retries per process per window - beyond it, requests just fail</button>
+      <button class="qopt">B · The cloud spend allocated to retried jobs</button>
+      <button class="qopt">C · The number of engineers on call for retry incidents</button>
+      <p class="qwhy">The SRE book's example allows a process 60 retries per minute and then fails requests outright, because unbounded retries multiply across layers and can destabilize the whole system. Bounded, backed-off, then loud - that is the discipline.</p>
+    </div>
+    <p class="quiz-score">Answer all three to see your score.</p>
+  </section>
+
+  <!-- ============ COVERED ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources this session stands on</span>
+      <h2>What was covered</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Google SRE book · Monitoring Distributed Systems</span><span class="note">symptoms vs causes, pages must be actionable, four golden signals, failures masked by retries</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Google SRE book · Addressing Cascading Failures</span><span class="note">retry amplification, randomized exponential backoff, the 60-per-minute retry budget</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">AWS Builders' Library · Timeouts, retries, and backoff with jitter</span><span class="note">selfish retries, the medicine dose, 243x layered amplification, the SDK token bucket</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Apache Airflow docs (3.3.1) · Tasks</span><span class="note">SLAs removed in 3.0, Deadline Alerts since 3.1 - the outcome-deadline idea, first-class</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">dbt docs · source freshness</span><span class="note">warn_after / error_after against loaded_at - the freshness half of the contract as a SELECT</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Confluent-scale ops, Airflow internals</span><span class="note">executors, control planes and cluster ops are the next course up, not this one</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 6 cheat sheet</h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Symptom, not cause</b><span>Page on the broken promise (no dashboard by 7) - never on processes restarting behind it.</span></div>
+      <div class="cheat-item"><b>The two-question pager test</b><span>Actionable? Requires intelligence? Fail either, delete the alert.</span></div>
+      <div class="cheat-item"><b>Deadline alerts</b><span>Declare when the outcome is due. Airflow 2's SLA is gone; Airflow 3.1 calls this Deadline Alerts.</span></div>
+      <div class="cheat-item"><b>Retries are a loan</b><span>Paid back in detection time on the one failure they cannot fix. Two with backoff, then loud.</span></div>
+      <div class="cheat-item"><b>Retry budget</b><span>A hard cap per window (SRE example: 60/min), because layered retries multiply - up to the product of attempts.</span></div>
+      <div class="cheat-item"><b>Alerting fixes nothing</b><span>Same mornings, same numbers. It buys runway: 9h 4m to 12 min on the night that mattered.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <p>Session 6 of 6 · learn-data-orchestration-with-phoebe · by Phoebe Fu</p>
+    <nav class="pagenav">
+      <a href="05-backfills.html">← Prev: Backfills</a>
+      <a href="../index.html">Course home →</a>
+    </nav>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+<script src="../assets/orchestra-live.js?v=1"></script>
+</body>
+</html>

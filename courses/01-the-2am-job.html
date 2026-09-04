@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 1 of 6. Cron runs Daybreak's nightly build, on time, every night - and a third of the mornings are quietly wrong. What cron actually promises, and the three silent failures it cannot see.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The 2am job - learn data orchestration with phoebe">
+<meta property="og:description" content="Session 1 of 6. Cron is punctual, not correct. The three silent failures of clock-based scheduling.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/courses/01-the-2am-job.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The 2am job - learn data orchestration with phoebe">
+<meta name="twitter:description" content="Session 1 of 6. Cron is punctual, not correct.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 1 · The 2am job - learn data orchestration with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=1">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-data-orchestration-with-phoebe</a> / Session 1 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Data Orchestration with Phoebe · Session 1 of 6</div>
+    <h1>The <span class="accent">2am job</span></h1>
+    <p class="sub">Every night at 2am, seven tasks rebuild Daybreak's warehouse, and every morning at 7 the dashboard is waiting, right on time. It has published thirty mornings out of thirty this month. Roughly a third of them were wrong, and nothing anywhere said so. This session is about the scheduler running those tasks - what it actually promises, and the three failures it is structurally unable to notice.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Start here</span>
+      <span class="chip audience">Anyone who owns a scheduled job</span>
+      <span class="chip audience">Knows what a pipeline is, gets paged when one dies</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · What cron promises, and the three silent failures</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: thirty nights on bare cron</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where this course goes</h2>
+    </div>
+    <p class="lede">Six sessions, one running artifact: Daybreak's nightly warehouse build, the 2am batch that Learn Data Pipelines assembled and Learn Streaming Data raced past. Today it is one crontab file. By session 6 it is a governed DAG with retries, rerun-safe tasks, a tested backfill path and an alert that fires before anyone opens the dashboard - and you will have watched every upgrade earn its keep across the same thirty nights.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with:</strong> the punctual-liar frame - on time and correct are different promises - plus a precise list of what clock-based scheduling actually guarantees, and the thirty-nights simulator you will upgrade lever by lever for five more sessions.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers cron</span>
+      <h2>What cron actually promises <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Cron is not a lesser orchestrator. It is a clock with an execute button, and the man page is admirably clear about which one it is.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 260" role="img" aria-label="Cron fires each task at its appointed minute with no connections between them">
+        <style>
+          .cnT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .cnW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .cnL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .cnM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .cnN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+        </style>
+        <text x="440" y="26" class="cnT" text-anchor="middle">One crontab, seven appointments, zero wires</text>
+        <rect x="60" y="50" width="110" height="36" rx="8" fill="#065F46"/>
+        <text x="115" y="73" class="cnW" text-anchor="middle">2:00 extracts</text>
+        <rect x="230" y="50" width="100" height="36" rx="8" fill="#059669"/>
+        <text x="280" y="73" class="cnW" text-anchor="middle">2:30 clean</text>
+        <rect x="390" y="50" width="100" height="36" rx="8" fill="#059669"/>
+        <text x="440" y="73" class="cnW" text-anchor="middle">3:00 join</text>
+        <rect x="550" y="50" width="120" height="36" rx="8" fill="#059669"/>
+        <text x="610" y="73" class="cnW" text-anchor="middle">3:30 aggregate</text>
+        <rect x="720" y="50" width="110" height="36" rx="8" fill="#2FB58C"/>
+        <text x="775" y="73" class="cnL" text-anchor="middle">4:00 publish</text>
+        <text x="440" y="120" class="cnM" text-anchor="middle">each fires when the clock matches its minute - none of them knows the others exist</text>
+        <rect x="150" y="145" width="580" height="52" rx="10" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="440" y="167" class="cnL" text-anchor="middle">the whole contract: "run this command when these fields match the time"</text>
+        <text x="440" y="186" class="cnM" text-anchor="middle">nothing about success, order, or what happened upstream</text>
+        <rect x="60" y="222" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="84" y="234" class="cnN">Cron promises punctuality. Everything else on this page is your problem.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - Daybreak's nightly build as cron sees it: seven unrelated appointments.</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span> The contract, straight from the man page <span class="mini">4 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The crontab(5) man page defines the entire deal: commands are executed when the minute, hour and month fields match the current time, and cron examines its entries every minute. That is the whole promise. Read the page looking for the words "depends", "retry" or "overlap" and you will not find them - not because the docs are lazy, but because cron defines no such features. It is a clock, and clocks do not check your work.</p>
+        <ul>
+          <li><strong>No dependencies.</strong> The 2:30 clean job fires at 2:30 whether the 2:00 extracts succeeded, failed, or are still running.</li>
+          <li><strong>No retries.</strong> A task that dies, died. Tonight's run is over; see you tomorrow.</li>
+          <li><strong>No overlap protection.</strong> If tonight's job is still running when tomorrow's fires, both run.</li>
+          <li><strong>No downtime catch-up.</strong> A run missed while the box was down is simply gone - that gap is what anacron exists to fill.</li>
+        </ul>
+        <div class="callout example"><span class="ex-pill">Real world</span>
+          <p>The man page even documents the clock biting back: jobs scheduled inside the daylight-saving "missing hour" never run, and times that occur twice run twice. Teams discover this exactly two mornings per year, both times by surprise.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> Why cron is still everywhere, and still fine <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>None of this makes cron bad. A single job with no upstream - a log rotation, a certificate renewal, a cache warm - needs exactly a clock, and adding an orchestrator to it is ceremony. Cron even quietly compensates for small clock adjustments: after a jump of under three hours, skipped jobs run immediately and doubled ones are suppressed.</p>
+        <p>Cron fails you at a specific, predictable moment: the moment one job's OUTPUT becomes another job's INPUT. That is when "run at 2:30" silently stops meaning what you needed it to mean, which was "run after the extracts succeed". Everything in this course flows from that one substitution.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the failure modes</span>
+      <h2>Three ways to be wrong on time <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">A clock-scheduled chain does not fail loudly. It publishes. Here are the three silent failures every cron-run pipeline commits, and why no one gets paged for any of them.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 320" role="img" aria-label="A failed extract, and the clean job that runs anyway on stale data">
+        <style>
+          .sfT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .sfW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .sfL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .sfM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .sfN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+          .sfR { font: 700 11px Inter, sans-serif; fill: #991B1B; }
+        </style>
+        <text x="440" y="26" class="sfT" text-anchor="middle">Tonight: extract orders dies at 2:04</text>
+        <rect x="70" y="50" width="150" height="40" rx="8" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text x="145" y="70" class="sfR" text-anchor="middle">2:00 extract orders</text>
+        <text x="145" y="84" class="sfR" text-anchor="middle">✕ died at 2:04</text>
+        <rect x="290" y="50" width="140" height="40" rx="8" fill="#059669"/>
+        <text x="360" y="75" class="sfW" text-anchor="middle">2:30 clean runs</text>
+        <rect x="500" y="50" width="130" height="40" rx="8" fill="#059669"/>
+        <text x="565" y="75" class="sfW" text-anchor="middle">3:00 join runs</text>
+        <rect x="700" y="50" width="130" height="40" rx="8" fill="#2FB58C"/>
+        <text x="765" y="75" class="sfL" text-anchor="middle">4:00 publishes</text>
+        <line x1="222" y1="70" x2="286" y2="70" stroke="#BFD6CB" stroke-width="2" marker-end="url(#sfArr)"/>
+        <line x1="432" y1="70" x2="496" y2="70" stroke="#BFD6CB" stroke-width="2" marker-end="url(#sfArr)"/>
+        <line x1="632" y1="70" x2="696" y2="70" stroke="#BFD6CB" stroke-width="2" marker-end="url(#sfArr)"/>
+        <defs><marker id="sfArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#BFD6CB"/></marker></defs>
+        <text x="360" y="115" class="sfM" text-anchor="middle">clean found YESTERDAY'S orders partition</text>
+        <text x="360" y="131" class="sfM" text-anchor="middle">sitting where tonight's should be - and used it</text>
+        <rect x="70" y="160" width="760" height="88" rx="10" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="90" y="186" class="sfL">The three silent failures of clock scheduling:</text>
+        <text x="90" y="208" class="sfM">1. Stale input - upstream died or landed late, downstream ran anyway on whatever was there</text>
+        <text x="90" y="226" class="sfM">2. Overlap - a slow night is still running when the next task's minute arrives, so it reads half-written data</text>
+        <text x="90" y="244" class="sfM">3. The missed run - downtime or the DST missing hour, and that night simply never happened</text>
+        <rect x="70" y="280" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="94" y="292" class="sfN">All three publish a dashboard. None of them says anything. That is the trap.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the extract dies, everything downstream runs anyway, the morning looks normal.</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span> Why nobody notices for weeks <span class="mini">4 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Every monitoring instinct people bring to scheduled jobs checks the wrong thing: is the process running, did the script exit zero, is the machine up. On the stale-input night, every one of those checks passes. The extract failed, but the CLEAN job exited zero - it cleaned yesterday's data flawlessly. The dashboard renders. The numbers are plausible. Plausible is the operative word: revenue that is 4 percent off because one source went stale does not look broken, it looks like Tuesday.</p>
+        <p>The failure only becomes visible when someone cross-checks against a source system, which at most companies is a month-end activity. By then there are twenty mornings of decisions sitting on top of it.</p>
+        <div class="callout example"><span class="ex-pill">Real world</span>
+          <p>Daybreak's version: the payments extract dies at 2:04, the 7am dashboard shows card revenue flat while cash is up, and a regional manager spends the morning drafting a memo about a cash-preference trend that does not exist. The pipeline never errored. It just told yesterday's truth with today's date on it.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> The padding arms race, and why it always loses <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The folk remedy for clock scheduling is padding: extracts at 2:00, clean at 2:30 "to be safe", then 2:45 after the first incident, then 3:15 after the second. Two things go wrong. The padding is dead time on every NORMAL night, so the dashboard gets later all year for the benefit of the occasional slow one. And no amount of padding is ever enough, because volume grows and the slowest night keeps moving.</p>
+        <p>Padding is a guess about duration standing in for a fact about completion. The next session replaces the guess with the fact: run when upstream has succeeded, however long that took. Once that wire exists, the padding - and the guessing - goes away.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the artifact</span>
+      <h2>Meet the nightly build <span class="tag concept">5 min live</span></h2>
+    </div>
+    <p class="lede">The chain you will operate for six sessions. Seven tasks, one warehouse, one 7am promise.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 270" role="img" aria-label="Daybreak's seven-task nightly build and its 7am deadline">
+        <style>
+          .nbT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .nbW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .nbL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .nbM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .nbN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+        </style>
+        <text x="440" y="26" class="nbT" text-anchor="middle">Daybreak's nightly build</text>
+        <rect x="60" y="48" width="140" height="32" rx="7" fill="#065F46"/>
+        <text x="130" y="69" class="nbW" text-anchor="middle">extract orders</text>
+        <rect x="60" y="90" width="140" height="32" rx="7" fill="#065F46"/>
+        <text x="130" y="111" class="nbW" text-anchor="middle">extract payments</text>
+        <rect x="60" y="132" width="140" height="32" rx="7" fill="#065F46"/>
+        <text x="130" y="153" class="nbW" text-anchor="middle">extract inventory</text>
+        <rect x="280" y="90" width="100" height="32" rx="7" fill="#059669"/>
+        <text x="330" y="111" class="nbW" text-anchor="middle">clean</text>
+        <rect x="450" y="90" width="100" height="32" rx="7" fill="#059669"/>
+        <text x="500" y="111" class="nbW" text-anchor="middle">join</text>
+        <rect x="620" y="90" width="110" height="32" rx="7" fill="#059669"/>
+        <text x="675" y="111" class="nbW" text-anchor="middle">aggregate</text>
+        <rect x="620" y="150" width="180" height="32" rx="7" fill="#2FB58C"/>
+        <text x="710" y="171" class="nbL" text-anchor="middle">publish dashboard</text>
+        <line x1="202" y1="64" x2="276" y2="100" stroke="#BFD6CB" stroke-width="2" marker-end="url(#nbArr)"/>
+        <line x1="202" y1="106" x2="276" y2="106" stroke="#BFD6CB" stroke-width="2" marker-end="url(#nbArr)"/>
+        <line x1="202" y1="148" x2="276" y2="112" stroke="#BFD6CB" stroke-width="2" marker-end="url(#nbArr)"/>
+        <line x1="382" y1="106" x2="446" y2="106" stroke="#BFD6CB" stroke-width="2" marker-end="url(#nbArr)"/>
+        <line x1="552" y1="106" x2="616" y2="106" stroke="#BFD6CB" stroke-width="2" marker-end="url(#nbArr)"/>
+        <line x1="675" y1="124" x2="700" y2="146" stroke="#BFD6CB" stroke-width="2" marker-end="url(#nbArr)"/>
+        <defs><marker id="nbArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#BFD6CB"/></marker></defs>
+        <text x="330" y="210" class="nbM" text-anchor="middle">three sources in, one dashboard out</text>
+        <text x="710" y="210" class="nbM" text-anchor="middle">due 7:00am, every morning</text>
+        <rect x="60" y="236" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="84" y="248" class="nbN">The arrows are real dependencies. Tonight, under cron, nothing enforces them.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - seven tasks, three sources, one 7am promise. The arrows exist only in our heads so far.</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span> The 7am promise, stated precisely <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Every scheduled pipeline serves a deadline someone actually feels, and Daybreak's is 7am: store managers check the dashboard before opening. That gives every night exactly four outcomes, and naming them now pays off all course long.</p>
+        <ul>
+          <li><strong>On time and right</strong> - published by 7, numbers true. The only full success.</li>
+          <li><strong>Late but right</strong> - published after 7, numbers true. Annoying, visible, survivable.</li>
+          <li><strong>Silently wrong</strong> - published by 7, numbers false, nothing flagged. The expensive one.</li>
+          <li><strong>Never published</strong> - no dashboard at all. Painful, but at least it is LOUD.</li>
+        </ul>
+        <p>Most teams instinctively rank "never published" as the worst outcome. Watch tonight's build-along challenge that ranking: a missing dashboard triggers a phone call; a wrong one triggers a memo about a trend that does not exist.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO ============ -->
+  <section class="section" id="demo">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Thirty nights on bare cron <span class="tag demo">★ 22 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">The simulator you will upgrade for the rest of the course: thirty deterministic nights of the build you just met, run exactly the way the crontab runs it.</p>
+
+    <div class="orchsim" data-stage="1"></div>
+
+    <div class="steps">
+      <div class="step"><p>Read the two headline numbers together. Mornings on time: 30 out of 30 - cron never misses its minute. Mornings silently wrong: 12 out of 30. Say the pair out loud, because it is the whole lesson: this pipeline is perfectly punctual and wrong forty percent of the time.</p></div>
+      <div class="step"><p>Read the calendar squares and find the pattern that is NOT there: the red days are scattered, not clustered. Silent wrongness does not look like an outage. Each red square was a normal-looking morning that a failed extract, a late source, or an overlapping slow night quietly poisoned.</p></div>
+      <div class="step"><p>Now kill a task. Pick "clean" and run tonight's trace. Watch downstream: join and aggregate run anyway at their appointed minutes, consume whatever data is lying there, and publish. The trace ends with the sentence that should bother you: the dashboard looks exactly like every other morning.</p></div>
+      <div class="step"><p>Check the history counter: 26 of 30 days correct. Four mornings this month carried a logic bug (days 10 through 13) that no scheduler in any session can prevent - code bugs are code bugs. Keep an eye on that counter; in session 5 it becomes fixable.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Why the numbers are trustworthy:</strong> which tasks blip and which nights run slow is a fixed-seed teaching script, so every run of the month is comparable. What the scheduler does about each event - run anyway, wait, skip, retry, rerun - is genuinely computed, and it is the part the levers will change.</p>
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 2 <span class="tag exercise">15 min</span></h2>
+    </div>
+    <ul>
+      <li>Find one clock-scheduled chain you rely on (crontab, scheduled query, "runs nightly" anything). Write down its tasks and draw the real dependency arrows between them, the way part 3 did for Daybreak.</li>
+      <li>For that chain, name its 7am: the moment a real person consumes the output. If you cannot name one, note that too - a pipeline with no consumer deadline is its own finding.</li>
+      <li>Classify its last bad morning using the four outcomes: late-but-right, silently wrong, never published. If you cannot tell which it was, write down WHY you cannot tell - that answer is session 6's alerting material arriving early.</li>
+    </ul>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1. What does cron actually promise about a scheduled command?</p>
+      <button class="qopt">A · It runs after its upstream jobs have succeeded</button>
+      <button class="qopt">B · It runs, and retries until it succeeds</button>
+      <button class="qopt">C · It runs when the time fields match the current time - nothing more</button>
+      <p class="qwhy">The crontab man page's whole contract is time-field matching, checked every minute. Dependencies, retries and overlap protection are not weaknesses in cron's implementation - they are simply not in the contract.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2. The 2:00 extract dies. What does the 2:30 clean job do under cron?</p>
+      <button class="qopt">A · Runs anyway, on whatever data it finds - probably yesterday's</button>
+      <button class="qopt">B · Waits until the extract is rerun</button>
+      <button class="qopt">C · Fails immediately with a missing-dependency error</button>
+      <p class="qwhy">Cron has no idea clean and the extract are related. Clean fires at 2:30, finds yesterday's partition where tonight's should be, exits zero, and the morning looks completely normal. That is the stale-input failure.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3. Thirty mornings on time, twelve silently wrong. What is the honest reading?</p>
+      <button class="qopt">A · The pipeline is 100% reliable and needs no changes</button>
+      <button class="qopt">B · Punctuality and correctness are separate promises, and cron only makes the first</button>
+      <button class="qopt">C · The twelve wrong mornings prove the schedule times are wrong</button>
+      <p class="qwhy">No amount of adjusting the minutes fixes stale inputs, overlaps or missed runs - padding is a guess about duration standing in for a fact about completion. The fix is making dependencies real, which is session 2.</p>
+    </div>
+    <p class="quiz-score">Answer all three to see your score.</p>
+  </section>
+
+  <!-- ============ COVERED ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources this session stands on</span>
+      <h2>What was covered</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">crontab(5) man page</span><span class="note">the time-matching contract, the every-minute check, the DST missing-hour and doubled-hour behavior</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">cron(8) man page</span><span class="note">small clock-jump compensation; periodic jobs handed to anacron for downtime catch-up</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Feature-absence readings</span><span class="note">no dependencies, retries or overlap protection appear anywhere in the man pages - absence, not quotation</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 1 cheat sheet</h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Cron's contract</b><span>Run the command when the time fields match. Nothing about success, order, or upstream.</span></div>
+      <div class="cheat-item"><b>The punctual liar</b><span>30/30 on time, 12/30 silently wrong. On time and correct are different promises.</span></div>
+      <div class="cheat-item"><b>Three silent failures</b><span>Stale input, overlap on slow nights, the missed run. All three publish; none of them speaks.</span></div>
+      <div class="cheat-item"><b>Four morning outcomes</b><span>On time and right · late but right · silently wrong · never published. The silent one costs the most.</span></div>
+      <div class="cheat-item"><b>Padding loses</b><span>A duration guess standing in for a completion fact. The slowest night always outgrows it.</span></div>
+      <div class="cheat-item"><b>When cron is right</b><span>Single jobs with no upstream: rotations, renewals, cache warms. A clock is exactly enough there.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <p>Session 1 of 6 · learn-data-orchestration-with-phoebe · by Phoebe Fu</p>
+    <nav class="pagenav">
+      <a href="../index.html">← Course home</a>
+      <a href="02-from-cron-to-dag.html">Next: From cron to DAG →</a>
+    </nav>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+<script src="../assets/orchestra-live.js?v=1"></script>
+</body>
+</html>

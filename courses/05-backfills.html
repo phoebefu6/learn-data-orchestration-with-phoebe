@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 5 of 6. The aggregate bug shipped day 10 and was found day 14 - the fix repairs tomorrow, but days 10 to 13 sit wrong in every downstream table. Catchup versus backfill, and why idempotency gates the button.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Repairing history - learn data orchestration with phoebe">
+<meta property="og:description" content="Session 5 of 6. A backfill is reruns at scale: with idempotent tasks it is a button, with append-y ones it is vandalism.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/courses/05-backfills.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Repairing history - learn data orchestration with phoebe">
+<meta name="twitter:description" content="Session 5 of 6. A backfill is reruns at scale.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 5 · Backfills - learn data orchestration with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=1">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-data-orchestration-with-phoebe</a> / Session 5 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Data Orchestration with Phoebe · Session 5 of 6</div>
+    <h1>Repairing <span class="accent">history</span></h1>
+    <p class="sub">The aggregate logic bug shipped on day 10 and was caught on day 14. The code fix took an hour, and it repaired exactly one thing: tomorrow. Days 10 through 13 are still sitting wrong in the warehouse, in every table derived from it, and in the month-end report nobody has pulled yet. Tonight is about the operation that repairs the record - what a backfill is, what it is not, and why last session's rerun-safety is the price of admission.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Four mornings shipped a bug and the tables still carry it</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Catchup, backfill, and the precondition</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: restating days 10-13</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where the artifact stands</h2>
+    </div>
+    <p class="lede">Daybreak's ladder so far: dependencies, bounded retries, rerun-safe tasks. The board reads 28 mornings on time, 4 silently wrong, double-writes zero - and one counter that has not moved since session 1: days of history correct, stuck at 26 of 30. Every lever so far protected FUTURE mornings. This session's lever is the first one that points backwards.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with:</strong> the catchup-versus-backfill distinction (filling gaps versus deliberately redoing what ran wrong), the reason idempotency is a hard precondition rather than a nice-to-have, and the one-sentence stakeholder framing for every restatement you will ever run.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers catchup and backfill</span>
+      <h2>Two ways to run the past <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">Because session 2 made runs be ABOUT intervals, the past is addressable: every night has a name, and a named night can be run again. Orchestrators expose that in two forms that look alike and mean very different things.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" role="img" aria-label="A calendar strip: catchup fills intervals that never ran, a backfill overwrites four that ran wrong">
+        <style>
+          .cwT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .cwL { font: 600 12px Inter, sans-serif; fill: #10231C; }
+          .cwS { font: 600 11px Inter, sans-serif; fill: #065F46; }
+          .cwD { font: 600 11px Inter, sans-serif; fill: #5E7268; }
+          .cwR { font: 700 11px Inter, sans-serif; fill: #991B1B; }
+          .cwM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .cwN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+        </style>
+        <text x="440" y="26" class="cwT" text-anchor="middle">Running the past: two different verbs</text>
+        <text x="70" y="58" class="cwL">Catchup - intervals that never ran</text>
+        <rect x="70" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="98" y="93" class="cwS" text-anchor="middle">1</text>
+        <rect x="134" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="162" y="93" class="cwS" text-anchor="middle">2</text>
+        <rect x="198" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="226" y="93" class="cwS" text-anchor="middle">3</text>
+        <rect x="262" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="290" y="93" class="cwS" text-anchor="middle">4</text>
+        <rect x="326" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="354" y="93" class="cwS" text-anchor="middle">5</text>
+        <rect x="390" y="70" width="56" height="36" rx="6" fill="none" stroke="#BFD6CB" stroke-dasharray="5 4"/><text x="418" y="93" class="cwD" text-anchor="middle">6</text>
+        <rect x="454" y="70" width="56" height="36" rx="6" fill="none" stroke="#BFD6CB" stroke-dasharray="5 4"/><text x="482" y="93" class="cwD" text-anchor="middle">7</text>
+        <rect x="518" y="70" width="56" height="36" rx="6" fill="none" stroke="#BFD6CB" stroke-dasharray="5 4"/><text x="546" y="93" class="cwD" text-anchor="middle">8</text>
+        <rect x="582" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="610" y="93" class="cwS" text-anchor="middle">9</text>
+        <rect x="646" y="70" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="674" y="93" class="cwS" text-anchor="middle">10</text>
+        <text x="70" y="132" class="cwM">the scheduler was down days 6-8: with catchup=True it starts a run for every interval that has none</text>
+        <text x="70" y="186" class="cwL">Backfill - intervals that ran, and ran wrong</text>
+        <rect x="70" y="198" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="98" y="221" class="cwS" text-anchor="middle">8</text>
+        <rect x="134" y="198" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="162" y="221" class="cwS" text-anchor="middle">9</text>
+        <rect x="198" y="198" width="56" height="36" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/><text x="226" y="221" class="cwR" text-anchor="middle">10</text>
+        <rect x="262" y="198" width="56" height="36" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/><text x="290" y="221" class="cwR" text-anchor="middle">11</text>
+        <rect x="326" y="198" width="56" height="36" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/><text x="354" y="221" class="cwR" text-anchor="middle">12</text>
+        <rect x="390" y="198" width="56" height="36" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/><text x="418" y="221" class="cwR" text-anchor="middle">13</text>
+        <rect x="454" y="198" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="482" y="221" class="cwS" text-anchor="middle">14</text>
+        <rect x="518" y="198" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="546" y="221" class="cwS" text-anchor="middle">15</text>
+        <rect x="582" y="198" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="610" y="221" class="cwS" text-anchor="middle">16</text>
+        <rect x="646" y="198" width="56" height="36" rx="6" fill="#A7E8D0"/><text x="674" y="221" class="cwS" text-anchor="middle">17</text>
+        <text x="70" y="260" class="cwM">every square already has a run - you choose a window and deliberately do it again, correctly</text>
+        <text x="70" y="278" class="cwM">backfill create --dag-id nightly --from-date day10 --to-date day13 --reprocess-behavior</text>
+        <rect x="70" y="304" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="94" y="316" class="cwN">Catchup fills gaps the scheduler owns. A backfill is a human decision to rewrite history.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - dashed squares never ran and catchup fills them; red squares ran wrong and only a deliberate backfill redoes them.</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span> Daybreak's case: fixed pipeline, unfixed tables <span class="mini">5 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Airflow definitions first, because the words get swapped constantly. With catchup=True, "the scheduler will kick off a Dag Run for any data interval that has not been run since the last data interval (or has been cleared)" - the scheduler filling slots it knows are empty. A backfill is the deliberate version: "re-run all the instances of the dag_id for all the intervals within the start date and end date". In Airflow 3 it is a first-class command: airflow backfill create --dag-id --from-date --to-date --reprocess-behavior. The distinction that matters operationally: catchup handles intervals that NEVER ran; a backfill reprocesses intervals that DID run - because the code or the data was wrong when they did.</p>
+        <p>Daybreak is squarely in the second case. The bug shipped day 10, was found day 14, and the hotfix means every night from 15 onward computes correctly. But nothing about fixing the code touches what the bug already wrote: days 10 through 13 are wrong in the aggregate table, wrong in everything joined onto it, and wrong in every export taken since.</p>
+        <div class="callout example"><span class="ex-pill">Real world</span>
+          <p>Day 20, the month-end report gets pulled. It aggregates over the whole month, so it still contains the bug-era numbers for days 10-13 - a week after the "fix" went out. A fixed pipeline with unfixed tables keeps re-serving the old mistake every time someone queries the window it lives in. Until history is restated, the fix is a promise about the future only.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> The same verb in partition-native vocabulary <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Dagster, which thinks in assets and partitions rather than dag runs, defines it in one line: "Backfilling is the process of running partitions for assets that either don't exist or updating existing records". Same two cases, same verb - fill what is missing, redo what is wrong - which is the tell that this is a concept of scheduled data work, not a feature of one tool. Whatever orchestrator you land on, look for the operation that says "run this window of the past again" and check what it assumes about your tasks before you trust it. The next part is exactly that assumption.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the precondition</span>
+      <h2>A backfill is reruns at scale <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Session 4 made one rerun safe. A backfill is nothing but reruns in a row - so whatever a rerun does to one night, a backfill does to the whole window, at once, on purpose.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" role="img" aria-label="The same four-day backfill: idempotent tasks converge to truth, append-y tasks pile duplicates onto bad data">
+        <style>
+          .bvT { font: 700 14px Inter, sans-serif; fill: #10231C; }
+          .bvW { font: 600 11px Inter, sans-serif; fill: #fff; }
+          .bvL { font: 600 11px Inter, sans-serif; fill: #10231C; }
+          .bvM { font: 400 11px Inter, sans-serif; fill: #5E7268; }
+          .bvN { font: 600 11px Inter, sans-serif; fill: #3A2400; }
+          .bvR { font: 700 11px Inter, sans-serif; fill: #991B1B; }
+        </style>
+        <text x="440" y="26" class="bvT" text-anchor="middle">The same 4-day backfill, two kinds of pipeline</text>
+        <text x="235" y="56" class="bvL" text-anchor="middle">Idempotent tasks</text>
+        <text x="645" y="56" class="bvL" text-anchor="middle">Append-y tasks</text>
+        <rect x="70" y="72" width="330" height="30" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="235" y="91" class="bvL" text-anchor="middle">day 10 rerun overwrites day 10's partition</text>
+        <line x1="235" y1="104" x2="235" y2="114" stroke="#BFD6CB" stroke-width="2" marker-end="url(#bvArr)"/>
+        <rect x="70" y="118" width="330" height="30" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="235" y="137" class="bvL" text-anchor="middle">days 11-13 the same: overwrite each night</text>
+        <line x1="235" y1="150" x2="235" y2="160" stroke="#BFD6CB" stroke-width="2" marker-end="url(#bvArr)"/>
+        <rect x="70" y="164" width="330" height="34" rx="8" fill="#065F46"/>
+        <text x="235" y="185" class="bvW" text-anchor="middle">four partitions now hold the truth</text>
+        <text x="235" y="222" class="bvM" text-anchor="middle">run it again by accident: nothing changes</text>
+        <rect x="480" y="72" width="330" height="30" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="645" y="91" class="bvL" text-anchor="middle">day 10 rerun appends onto the bad rows</text>
+        <line x1="645" y1="104" x2="645" y2="114" stroke="#BFD6CB" stroke-width="2" marker-end="url(#bvArr)"/>
+        <rect x="480" y="118" width="330" height="30" rx="7" fill="#ECFDF5" stroke="#BFD6CB"/>
+        <text x="645" y="137" class="bvL" text-anchor="middle">days 11-13 stack duplicates the same way</text>
+        <line x1="645" y1="150" x2="645" y2="160" stroke="#BFD6CB" stroke-width="2" marker-end="url(#bvArr)"/>
+        <rect x="480" y="164" width="330" height="34" rx="8" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text x="645" y="185" class="bvR" text-anchor="middle">bad data AND duplicates, four days deep</text>
+        <text x="645" y="222" class="bvM" text-anchor="middle">the repair itself now needs a cleanup plan</text>
+        <defs><marker id="bvArr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#BFD6CB"/></marker></defs>
+        <rect x="70" y="286" width="14" height="14" fill="#B45309" rx="3"/>
+        <text x="94" y="298" class="bvN">With overwrite-the-partition, a backfill is a button. With append, repair becomes vandalism.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - identical backfill command, opposite outcomes: convergence to truth versus duplicates piled on top of the bug.</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span> The downstream blast radius <span class="mini">4 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Beauchemin states the scope plainly: when a source table's history changes, "all of the data structures derived from that table, for that time range, need to be reprocessed, or backfilled". Restating the aggregate is not enough if three tables are built from it - each of those needs days 10-13 redone too, in derivation order. And the redo must be honest: "apply the exact same compute scheme as we did on the original pass, on top of the new, corrected data" - the fixed logic, the same partitioning, no quiet extra adjustments smuggled in while nobody is looking.</p>
+        <p>Derivation order is exactly what one artifact in this course already knows: the DAG. That is why the backfill is an orchestrator feature and not a shell script - the same dependency graph that ordered tonight's run can order the reprocessing of any past window, task by task, downstream table by downstream table.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span> What a backfill cannot repair <span class="mini">3 min</span> <span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A backfill repairs the RECORD. It does not repair the mornings. On days 10 through 13, store managers opened a dashboard that was wrong, and whatever they decided on it - orders placed, staffing shifted, a memo written - already happened. No reprocessing reaches back into those decisions. This is why restatements deserve honest framing rather than quiet fixing: the trustworthy sentence for stakeholders is "history is now correct; here is the window where it was not." It tells people the numbers changed, why, and exactly which past reports to distrust - and it costs far less credibility than someone discovering the numbers moved on their own.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO ============ -->
+  <section class="section" id="demo">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Restating days 10-13 <span class="tag demo">★ 22 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">The first backwards-pointing lever. It is gated twice - once by your passport, once by physics.</p>
+
+    <div class="orchsim" data-stage="5"></div>
+
+    <div class="steps">
+      <div class="step"><p>Rebuild the ladder: DAG dependencies, retries, idempotent tasks. Confirm the board reads 28 mornings on time, 4 silently wrong - and days of history correct still stuck at 26 of 30. Those four are days 10-13, the bug window.</p></div>
+      <div class="step"><p>Find the backfill lever. It is passport-gated - four stamps open it, and the honest bypass link is there if your quiz record is short. Now test the second gate: flip idempotency OFF and try the backfill checkbox. It refuses, and its tooltip says why: backfilling non-idempotent tasks rewrites history unpredictably. The simulator will not let you commit last diagram's right-hand panel. Flip idempotency back on.</p></div>
+      <div class="step"><p>With idempotency on, flip "Backfill the bug window" and watch the counter that never moved before: days of history correct goes 26 of 30 to 30 of 30. The fixed aggregate logic reruns days 10-13 in dependency order, each night overwriting its own partitions.</p></div>
+      <div class="step"><p>Now read what did NOT change, because it is the honest half of the lesson: the calendar still shows the 4 red mornings, and silently wrong still reads 4 of 30. Those mornings happened - people saw wrong numbers and acted on them. The backfill restated the record, not the past. Say the stakeholder sentence out loud: history is now correct; here is the window where it was not.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Schedule the backfill conversation, not just the backfill:</strong> put it in the same meeting where the bug is announced. The repair window is a decision - how far back to restate, at what compute cost, and who needs to re-pull which reports - not a technicality to be discovered later. A bug announcement without a restatement plan is half an announcement.</p>
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 6 <span class="tag exercise">20 min</span></h2>
+    </div>
+    <ul>
+      <li>For the pipeline you have carried since session 1, answer in writing: has its history ever been restated? If yes, find how it was done (rerun window, manual SQL, or hope). If never, decide whether that means the code has never been wrong - or that nobody has ever repaired it.</li>
+      <li>Trace one important table's blast radius: list every table derived from it. That list is the true size of any future backfill, and most people have never written it down.</li>
+      <li>Draft your version of the stakeholder sentence for a hypothetical four-day bug in that pipeline: what would be restated, which reports would need re-pulling, and who would need to hear it. Keep it - you will not want to be writing it during the incident.</li>
+    </ul>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1. The scheduler was paused for three days and, on resume, starts runs for the missed intervals. Which mechanism is that?</p>
+      <button class="qopt">A · A backfill - any run over a past interval counts</button>
+      <button class="qopt">B · A retry - the runs failed to happen and are being retried</button>
+      <button class="qopt">C · Catchup - the scheduler filling data intervals that have no run yet</button>
+      <p class="qwhy">Catchup is the scheduler's own gap-filling: with catchup=True it kicks off a run for any data interval that has not been run (or has been cleared). A backfill is the deliberate human act of reprocessing intervals that DID run - because what they ran was wrong.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">2. Why does the backfill lever refuse to work without idempotent tasks?</p>
+      <button class="qopt">A · Backfills need the passport stamps that idempotency's quiz provides</button>
+      <button class="qopt">B · A backfill is reruns at scale - append-y tasks would stack four days of duplicates on top of the bad data</button>
+      <button class="qopt">C · Non-idempotent tasks are slower, so the backfill would miss the 7am deadline</button>
+      <p class="qwhy">Whatever one rerun does to one night, a backfill does to the whole window. If a rerun appends, the "repair" adds duplicates to every night it touches - repair becomes vandalism. Overwrite-the-partition tasks make the same command converge every night to the corrected truth.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3. After a clean backfill of the bug window, what is still true?</p>
+      <button class="qopt">A · The four mornings were still wrong when they happened - decisions made on them are not undone</button>
+      <button class="qopt">B · Nothing - the backfill erased the incident end to end</button>
+      <button class="qopt">C · The tables still hold the bug-era numbers until the next nightly run</button>
+      <p class="qwhy">A backfill repairs the record, not the past. The warehouse now holds correct history for days 10-13, but the dashboards people read on those mornings were wrong, and what they did about it already happened. Hence the stakeholder sentence: history is now correct; here is the window where it was not.</p>
+    </div>
+    <p class="quiz-score">Answer all three to see your score.</p>
+  </section>
+
+  <!-- ============ COVERED ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources this session stands on</span>
+      <h2>What was covered</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Apache Airflow docs (3.3.1) · DAG Runs</span><span class="note">catchup=True semantics, backfill as re-running all instances within a date window, the Airflow 3 backfill create CLI shape</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Beauchemin · Functional Data Engineering (2018)</span><span class="note">derived structures must be reprocessed for the range, exact same compute scheme on corrected data - retrieved via reader proxy</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Dagster docs · Backfills</span><span class="note">running partitions that don't exist or updating existing records - the same concept, partition-native vocabulary</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 5 cheat sheet</h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Catchup</b><span>The scheduler starts runs for intervals that never ran (or were cleared). Gap-filling it owns.</span></div>
+      <div class="cheat-item"><b>Backfill</b><span>You deliberately reprocess intervals that ran wrong: backfill create --dag-id --from-date --to-date.</span></div>
+      <div class="cheat-item"><b>The precondition</b><span>A backfill is reruns at scale. Append-y tasks turn repair into four days of stacked duplicates.</span></div>
+      <div class="cheat-item"><b>Blast radius</b><span>Every table derived from a restated one needs the same window redone - the DAG knows the order.</span></div>
+      <div class="cheat-item"><b>Same compute scheme</b><span>The redo runs the fixed logic on corrected data, nothing else - no quiet extra adjustments.</span></div>
+      <div class="cheat-item"><b>The stakeholder sentence</b><span>History is now correct; here is the window where it was not. The record is repaired, not the mornings.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <p>Session 5 of 6 · learn-data-orchestration-with-phoebe · by Phoebe Fu</p>
+    <nav class="pagenav">
+      <a href="04-idempotency.html">← Prev: Idempotency</a>
+      <a href="06-run-it-like-production.html">Next: Run it like production →</a>
+    </nav>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+<script src="../assets/orchestra-live.js?v=1"></script>
+</body>
+</html>

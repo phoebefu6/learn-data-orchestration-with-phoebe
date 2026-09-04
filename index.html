@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Six sessions on data orchestration: cron to DAGs, retries, idempotency, backfills, outcome alerting - with a 30-night simulator where bare cron is punctual and wrong, and every lever earns its keep. Free, by Phoebe Fu.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Learn Data Orchestration with Phoebe">
+<meta property="og:description" content="Cron is on time 30/30 and wrong 12/30. DAGs, retries, idempotency, backfills and alerting fix it - measurably.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Learn Data Orchestration with Phoebe">
+<meta name="twitter:description" content="Thirty nights at Daybreak: the punctual liar, the honest DAG, and the lever that only slows your pager.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Learn Data Orchestration with Phoebe</title>
+<link rel="stylesheet" href="assets/style.css?v=1">
+<style>
+
+  .stats-row { display: flex; gap: 2.4rem; margin-top: 1.5rem; flex-wrap: wrap; }
+  .stat b { display: block; font-size: 2.1rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .72rem; opacity: .85; text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+
+  .course-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .course-card {
+    border: 1px solid var(--hairline);
+    border-top: 4px solid var(--diff, var(--indigo));
+    border-radius: var(--radius);
+    padding: 1.2rem 1.3rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--ink);
+    background: #fff;
+    transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+    position: relative;
+  }
+  .course-card:hover { border-color: var(--indigo-soft); border-top-color: var(--diff, var(--indigo)); box-shadow: 0 8px 28px rgba(5,150,105,.14); transform: translateY(-3px); }
+  .course-card .cicon { font-size: 1.7rem; line-height: 1; }
+  .course-card .cnum { font-size: .72rem; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: .1em; }
+  .course-card h3 { font-size: 1.05rem; font-weight: 800; line-height: 1.3; }
+  .course-card p { font-size: .85rem; color: var(--muted); flex: 1; }
+  .course-card .meta { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+  .diff-legend { display: flex; gap: 1rem; margin-top: 1.6rem; font-size: .74rem; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+  .diff-legend i { display: inline-block; width: .85rem; height: .35rem; border-radius: 999px; margin-right: .35rem; vertical-align: middle; }
+
+  .paths { margin-top: 2.6rem; }
+  .paths h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .3rem; }
+  .paths .plede { color: var(--muted); font-size: .92rem; margin-bottom: .8rem; }
+  .path { display: flex; gap: .55rem; align-items: center; padding: .75rem 0; border-bottom: .5px solid var(--hairline); flex-wrap: wrap; }
+  .path:last-child { border-bottom: none; }
+  .path b { min-width: 15.5rem; font-size: .9rem; }
+  .path .pstep { background: var(--indigo-50); color: #047857; border-radius: 999px; padding: .16rem .68rem; font-weight: 700; font-size: .8rem; text-decoration: none; transition: all .12s ease; }
+  .path .pstep:hover { background: var(--indigo); color: #fff; }
+  .path .parr { color: var(--faint); font-weight: 700; }
+
+  .mm-section { margin-top: 1.6rem; }
+  .mm-section h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .2rem; }
+  .mm-section .mm-lede { color: var(--muted); font-size: .92rem; margin-bottom: .4rem; }
+  .mm-wrap { border: 1px solid var(--hairline); border-radius: var(--radius); background: linear-gradient(180deg,#fff,#ECFDF5); padding: .6rem; overflow-x: auto; }
+  .mm-svg { width: 100%; height: auto; display: block; max-width: 60rem; margin: 0 auto; min-width: 34rem; }
+  .mm-link { cursor: pointer; text-decoration: none; }
+  .mm-node rect { transition: opacity .15s ease, filter .15s ease; }
+  .mm-node text { pointer-events: none; }
+  .mm-link:hover .mm-node rect { filter: brightness(1.06); }
+  .mm-edge { transition: opacity .15s ease; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn with Phoebe · Data Engineering &amp; Infra</div>
+    <h1>Learn <span class="accent">Data Orchestration</span> with Phoebe</h1>
+    <p class="sub">Daybreak's nightly build runs on cron: thirty mornings out of thirty on time, twelve of them quietly wrong. This course upgrades that pipeline the honest way - dependencies that wait for facts, retries that know their price, tasks you can rerun without fear, a backfill that repairs history, and a page that fires while there is still night left. Every rung is measured across the same thirty nights, including the one lever that never helps.</p>
+    <div class="stats-row">
+      <div class="stat"><b data-count="6">6</b><span>sessions</span></div>
+      <div class="stat"><b data-count="30">30</b><span>nights, replayed per lever</span></div>
+      <div class="stat"><b data-count="12">12</b><span>silently wrong mornings on cron</span></div>
+      <div class="stat"><b data-count="12">12</b><span>minutes to a page, from 9 hours</span></div>
+      <div class="stat"><b data-count="45">45</b><span>min per session</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>The six sessions 🌙 <span style="font-size:.85rem;font-weight:600;color:var(--muted)">· one nightly build, upgraded across all of them</span></h2>
+      <p class="plede">The running artifact is Daybreak's 2am warehouse build - the third course set in the world of Learn Data Pipelines (what a pipeline is) and Learn Streaming Data (the real-time layer). This one is about running the batch reliably.</p>
+    </div>
+
+    <div class="course-grid">
+      <a class="course-card" href="courses/01-the-2am-job.html" style="--diff:#34D399">
+        <span class="cicon">🕑</span>
+        <span class="cnum">Session 1 · easy</span>
+        <h3>The 2am job</h3>
+        <p>Cron promises punctuality and nothing else. Thirty mornings on time, twelve silently wrong - and the three failures a clock cannot see.</p>
+        <span class="meta"><span class="pill amber">▶ Start here</span></span>
+      </a>
+      <a class="course-card" href="courses/02-from-cron-to-dag.html" style="--diff:#34D399">
+        <span class="cicon">🕸️</span>
+        <span class="cnum">Session 2 · easy</span>
+        <h3>From cron to DAG</h3>
+        <p>Replace "run at 2:30" with "run after clean succeeds". Wrong mornings collapse - and failed nights become honestly, visibly missing.</p>
+        <span class="meta"><span class="pill">dependencies</span></span>
+      </a>
+      <a class="course-card" href="courses/03-retries.html" style="--diff:#FBBF24">
+        <span class="cicon">🔁</span>
+        <span class="cnum">Session 3 · medium</span>
+        <h3>Retries</h3>
+        <p>Transient blips heal on attempt two. And the recovered nights start double-writing - availability bought with correctness, measured.</p>
+        <span class="meta"><span class="pill">halfway scorecard</span></span>
+      </a>
+      <a class="course-card" href="courses/04-idempotency.html" style="--diff:#FBBF24">
+        <span class="cicon">♻️</span>
+        <span class="cnum">Session 4 · medium</span>
+        <h3>Idempotency</h3>
+        <p>Overwrite the night's partition, never append. Reruns converge, the double-writes vanish, and the pipeline becomes auditable.</p>
+        <span class="meta"><span class="pill">rerun-safe</span></span>
+      </a>
+      <a class="course-card" href="courses/05-backfills.html" style="--diff:#FB923C">
+        <span class="cicon">📅</span>
+        <span class="cnum">Session 5 · hands-on</span>
+        <h3>Backfills</h3>
+        <p>A bug shipped on day 10 and was found on day 14. The fix repairs tomorrow; the backfill repairs the record - if your tasks earned it.</p>
+        <span class="meta"><span class="pill">🔒 needs idempotency</span></span>
+      </a>
+      <a class="course-card" href="courses/06-run-it-like-production.html" style="--diff:#FB923C">
+        <span class="cicon">📟</span>
+        <span class="cnum">Session 6 · hands-on</span>
+        <h3>Run it like production</h3>
+        <p>Page on the missing dashboard, never the restarting process. And the retry dial's true price: ten attempts, three fewer hours of night.</p>
+        <span class="meta"><span class="pill amber">final scorecard</span></span>
+      </a>
+    </div>
+
+    <div class="diff-legend">
+      <span><i style="background:#34D399"></i>easy - everyone</span>
+      <span><i style="background:#FBBF24"></i>medium</span>
+      <span><i style="background:#FB923C"></i>hands-on</span>
+      <span><i style="background:#F87171"></i>hardest</span>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>Your passport 🎫</h2>
+      <p class="plede">Clear all three quiz questions in a session and it gets stamped. Four stamps unlock the backfill lever. Stamps live in this browser only.</p>
+    </div>
+    <div class="pp-strip"></div>
+  </section>
+
+  <section class="section">
+    <div class="paths">
+      <h2>Choose your path 🗺️</h2>
+      <p class="plede">Three doors into the same conviction: on time and correct are different promises, and each lever pays for exactly one of them.</p>
+      <div class="path"><b>🔥 My scheduled job just burned me</b>
+        <a class="pstep" href="courses/01-the-2am-job.html">1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/02-from-cron-to-dag.html">2</a><span class="parr">→</span>
+        <a class="pstep" href="courses/06-run-it-like-production.html">6</a>
+        <span style="font-size:.82rem;color:var(--muted)">why it lied, how to wire the facts, who gets paged next time</span>
+      </div>
+      <div class="path"><b>🛠 My DAG runs but reruns scare me</b>
+        <a class="pstep" href="courses/03-retries.html">3</a><span class="parr">→</span>
+        <a class="pstep" href="courses/04-idempotency.html">4</a><span class="parr">→</span>
+        <a class="pstep" href="courses/05-backfills.html">5</a>
+        <span style="font-size:.82rem;color:var(--muted)">retries, rerun safety, then history repair - in that order</span>
+      </div>
+      <div class="path"><b>🌙 The whole journey</b>
+        <a class="pstep" href="courses/01-the-2am-job.html">1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/02-from-cron-to-dag.html">2</a><span class="parr">→</span>
+        <a class="pstep" href="courses/03-retries.html">3</a><span class="parr">→</span>
+        <a class="pstep" href="courses/04-idempotency.html">4</a><span class="parr">→</span>
+        <a class="pstep" href="courses/05-backfills.html">5</a><span class="parr">→</span>
+        <a class="pstep" href="courses/06-run-it-like-production.html">6</a>
+        <span style="font-size:.82rem;color:var(--muted)">from a crontab you hope about to a build you can defend</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>What is real here 🧾</h2>
+      <p class="plede">A course built around a simulator owes you a precise account of its own numbers.</p>
+    </div>
+    <table class="clean">
+      <tr><th>Claim</th><th>Status</th></tr>
+      <tr><td>The 30-night ladder: 12 wrong on cron, the retry dip 4 → 6, the 12-minute page</td><td>Computed live in your browser. Which nights blip or run slow is a fixed-seed script so runs are comparable; what the scheduler does about each - waiting, skipping, retrying, rerunning, restating - is real arithmetic, recomputed on every click</td></tr>
+      <tr><td>The retry rung making correctness WORSE before idempotency repairs it</td><td>Real arithmetic, kept on purpose: a crashed writer has already appended half its rows, and the retry appends them again</td></tr>
+      <tr><td>Cron's limits: no dependencies, no retries, no overlap protection</td><td>Verified as feature ABSENCE from the crontab(5) and cron(8) man pages - stated as absence, never as a quotation</td></tr>
+      <tr><td>DAG, catchup, backfill, data interval definitions; SLAs removed in Airflow 3</td><td>Quoted from the Apache Airflow 3.3.1 documentation, verified September 2026</td></tr>
+      <tr><td>Overwrite-the-partition idempotency and safe backfills</td><td>Quoted from Maxime Beauchemin's Functional Data Engineering (2018) - he created Airflow - and Airflow's own best-practices page</td></tr>
+      <tr><td>Retry amplification, retry budgets, alert-on-symptoms</td><td>Quoted from the Google SRE book (cascading failures + monitoring chapters) and the AWS Builders' Library</td></tr>
+    </table>
+  </section>
+
+  <section class="section mm-section">
+    <h2>The knowledge map 🧠</h2>
+    <p class="mm-lede">The whole course at a glance - hover a session to spotlight its concepts, click any node to jump in.</p>
+    <div class="mm-wrap"><div id="mindmap"></div></div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>learn-data-orchestration-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span>Pairs with <a href="https://phoebefu6.github.io/learn-data-pipelines-with-phoebe/">Learn Data Pipelines ↗</a> and <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">Learn Streaming Data ↗</a> · source map: <span class="mono">materials/official-course-map.md</span></span>
+  </footer>
+
+</main>
+
+<script>
+window.MINDMAP_DATA = {
+  "title": "Learn Data\nOrchestration",
+  "centerColor": "#065F46",
+  "sessions": [
+    {
+      "label": "The 2am job",
+      "href": "courses/01-the-2am-job.html",
+      "color": "#34D399",
+      "concepts": [
+        { "label": "Cron's real contract", "href": "courses/01-the-2am-job.html" },
+        { "label": "The punctual liar", "href": "courses/01-the-2am-job.html" },
+        { "label": "Three silent failures", "href": "courses/01-the-2am-job.html" }
+      ]
+    },
+    {
+      "label": "From cron\nto DAG",
+      "href": "courses/02-from-cron-to-dag.html",
+      "color": "#34D399",
+      "concepts": [
+        { "label": "Completion beats clocks", "href": "courses/02-from-cron-to-dag.html" },
+        { "label": "Skipped is honest", "href": "courses/02-from-cron-to-dag.html" },
+        { "label": "The data interval", "href": "courses/02-from-cron-to-dag.html" }
+      ]
+    },
+    {
+      "label": "Retries",
+      "href": "courses/03-retries.html",
+      "color": "#FBBF24",
+      "concepts": [
+        { "label": "Transient vs real", "href": "courses/03-retries.html" },
+        { "label": "Backoff and budgets", "href": "courses/03-retries.html" },
+        { "label": "The double-write dip", "href": "courses/03-retries.html" }
+      ]
+    },
+    {
+      "label": "Idempotency",
+      "href": "courses/04-idempotency.html",
+      "color": "#FBBF24",
+      "concepts": [
+        { "label": "Overwrite, never append", "href": "courses/04-idempotency.html" },
+        { "label": "Deterministic tasks", "href": "courses/04-idempotency.html" },
+        { "label": "Partition by interval", "href": "courses/04-idempotency.html" }
+      ]
+    },
+    {
+      "label": "Backfills",
+      "href": "courses/05-backfills.html",
+      "color": "#FB923C",
+      "concepts": [
+        { "label": "Catchup vs backfill", "href": "courses/05-backfills.html" },
+        { "label": "Idempotency first", "href": "courses/05-backfills.html" },
+        { "label": "Record, not mornings", "href": "courses/05-backfills.html" }
+      ]
+    },
+    {
+      "label": "Run it like\nproduction",
+      "href": "courses/06-run-it-like-production.html",
+      "color": "#FB923C",
+      "concepts": [
+        { "label": "Alert on outcomes", "href": "courses/06-run-it-like-production.html" },
+        { "label": "The retry-10x trap", "href": "courses/06-run-it-like-production.html" },
+        { "label": "The final scorecard", "href": "courses/06-run-it-like-production.html" }
+      ]
+    }
+  ]
+};
+</script>
+<script src="assets/mindmap.js?v=1"></script>
+<script src="assets/app.js?v=1"></script>
+</body>
+</html>
