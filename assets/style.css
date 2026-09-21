@@ -1339,3 +1339,23 @@ details.card summary .caret { color: #047857; }
 .oc-tracerow.bad { border-left-color:#B91C1C; background:#FEF2F2; }
 .oc-tracetail { font-size:.85rem; font-weight:600; color:var(--ink); padding:6px 10px; }
 .oc-verdict { font-size:.92rem; color:var(--ink); background:var(--indigo-50); border-left:3px solid var(--indigo); padding:10px 14px; border-radius:0 10px 10px 0; margin:12px 0 0; }
+
+/* ---------- footer session nav ----------
+   .pagenav is also the fixed side-dot strip app.js builds, and that strip is
+   hidden below 74rem. The footer reuses the class, so without these overrides
+   the prev/next links render at 0x0 on every screen under 1184px. */
+.pagefoot .pagenav {
+  display: flex;
+  position: static; transform: none; right: auto; top: auto; z-index: auto;
+  flex-direction: row; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-top: .6rem;
+}
+.pagefoot .pagenav a {
+  width: auto; height: auto; border: 0; background: none; border-radius: 0;
+  display: inline; font-size: .85rem; font-weight: 700; color: var(--indigo);
+  text-decoration: none;
+}
+.pagefoot .pagenav a:hover { transform: none; text-decoration: underline; border-color: transparent; }
+.pagefoot .pagenav a.active { background: none; }
+.pagefoot .pagenav a .nlabel { display: none; }
+@media (max-width: 74rem) { .pagefoot .pagenav { display: flex; } }
